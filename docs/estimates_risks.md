@@ -1,46 +1,53 @@
-# MIKRA: Estimates and Risk Register
+# MIKRA: Estimates and Risk Register (v2)
 
 ## 1. Effort estimates
 
-| Phase | Prototype (actual, AI-assisted) | Pilot v1 (estimate) |
+| Phase | Prototype (actual or plan, AI-assisted) | Pilot (estimate) |
 |---|---|---|
-| Design + plan | 20 min | 1 week |
-| Backend: routing, retrieval, answer pipeline | 40 min | 2 weeks |
-| Guardrails, governance, audit, analytics | 25 min | 2 weeks |
+| Design + plan (v1 and v2) | ~35 min | 1 week |
+| v1 backend, guardrails, audit, analytics | ~65 min | 3 weeks |
+| v1 tests + evals + docs + slide | ~40 min | 1 week |
+| **v2 agents** (adapter, router, specialists, synthesizer, fallback) | **~40 min, parallel sessions** | 2–3 weeks |
 | Frontend (parallel session) | ~60 min | 2 weeks |
-| Tests + evals | 20 min | 1 week (+ live LLM eval, judge calibration) |
-| Docs + slide + push | 20 min | — |
-| Real document ingestion (PDF, OCR), SSO, deployment | — | 3–4 weeks |
-| **Total** | **~2.5 h** | **~10–12 weeks, 2–3 engineers** |
+| v2 tests, paraphrase evals, live eval and tuning | ~20 min | 2 weeks (+ judge calibration) |
+| Real document ingestion (PDF, OCR), SSO, deployment | not in prototype | 3–4 weeks |
 
 ## 2. Run-cost estimate (illustrative, live LLM)
 
-- ~300 questions/day × ~2,500 input + ~400 output tokens per question, about 0.9M tokens/day.
-- At typical mid-tier model pricing that is **tens of dollars per month** for one plant.
-- Cost levers:
+- **Calls per question:** 1 router + 1–3 specialists (up to 3 steps each) + 1 synthesizer, so roughly **3–6 calls, and about 3–5× the tokens of the v1 design**.
+- At ~300 questions/day with a small model (`gpt-4o-mini`), the monthly cost for one plant stays in the **tens of dollars**. Check current provider pricing before quoting it.
+- **Levers:**
   - Cache answers to frequent questions.
-  - Route classification to a small model.
-  - Cap the context at 8 sections.
+  - Skip specialists the router scores low.
+  - Keep the small model for routing.
+  - Cap context to the top 4 sections per source.
+  - Use the rule-based pipeline when the router is highly confident (later).
 
 ## 3. Risk register
 
 | # | Risk | Likelihood | Impact | Mitigation | Owner |
 |---|---|---|---|---|---|
-| R1 | Safety question routed only to Maintenance | Low | **High** | Hazard keyword override forces the Safety source in; safety-inclusion recall eval at 100%; the safety note is shown first | EHS + Eng |
-| R2 | Confident wrong answer (hallucination) | Med (live LLM) | High | Answers only from retrieved sections; grounding check (citations must be retrieved); abstain on weak evidence; human feedback loop | Eng |
-| R3 | Outdated or unapproved document used | Med | High | Published-only retrieval; draft → approve workflow; old version retired automatically; draft-leak eval at 0 | Quality Mgr |
-| R4 | Prompt injection via question or document text | Med | Med | Injection and bypass patterns blocked; document text delimited as untrusted; document scan flags embedded instructions for the reviewer | Eng |
-| R5 | Supervisor relies on MIKRA in an emergency | Low | **High** | Emergency keywords show the "call ext. 5555" banner first; emergency SOP cited | EHS |
-| R6 | Keyword retrieval misses synonyms (e.g. "stuck" vs "jam") | Med | Med | v1: hybrid vector search plus a synonym list; documentation-gaps report shows misses | Eng |
-| R7 | Live LLM not yet validated (mock only) | Certain (today) | Med | Mock provider makes the demo deterministic; run `evals.run` with `LLM_PROVIDER=anthropic` before the pilot | Eng |
-| R8 | PII in questions (names, phones) | Med | Med | Masked before storage and logging | Eng |
-| R9 | Low adoption on the floor | Med | High | Answers in under 5 s, plain English, tablet UI; track usage and helpful % in analytics | Plant Mgr |
-| R10 | Synthetic data differs from real binders | Certain | Med | Pilot with 2–3 real documents per category; re-tune thresholds; re-run the golden set | Eng + SMEs |
+| R1 | Safety question routed only to Maintenance | Low | **High** | Hazard override in code (keyword rules ∪ router flag) forces the Safety specialist; safety-inclusion recall eval at 100% | EHS + Eng |
+| R2 | Confident wrong answer (hallucination) | **Med-High with a small model** | High | Citation-only claims; deterministic grounding check; abstain path; manual faithfulness check on multi-route cases; upgrade the synthesizer if evals show unsupported claims | Eng |
+| R3 | Outdated or unapproved document used | Med | High | Published-only retrieval; draft → approve; old version retired; draft-leak eval at 0 | Quality Mgr |
+| R4 | Prompt injection via question, document or tool result | Med | Med | Patterns blocked before any LLM call; text delimited as untrusted; agents have read-only tools; document scan flags embedded instructions | Eng |
+| R5 | Supervisor relies on MIKRA in an emergency | Low | **High** | Emergency banner first; emergency SOP cited | EHS |
+| R6 | Keyword search misses synonyms | Med | Med | Router agent rewrites queries; embeddings are a stretch goal; documentation-gaps report shows misses | Eng |
+| R7 | **Agent latency above target** (several sequential calls) | Med | Med | Parallel specialists; token caps; small model; fallback to the rule-based pipeline; streaming in the next version | Eng |
+| R8 | **First live LLM run, little time to tune prompts** | **High** | Med | Rule-based fallback behind a config flag; smoke test first; eval-gate before any quality claim | Eng |
+| R9 | **Non-deterministic evals** (flaky results) | Med | Med | Temperature 0; repeat failing cases; report counts, not only percentages | Eng |
+| R10 | **Data leaves the machine** (question and sections sent to the LLM API) | Certain (live mode) | Med | Synthetic data only today; PII masked; real documents need a data-handling and vendor review | Security |
+| R11 | **API key or access problems** (key expiry, quota, outage) | Med | Med | Key in `.env` only; fallback pipeline; provider-agnostic adapter | Eng |
+| R12 | Agent loops or runaway cost | Low | Med | Max 3 steps per specialist; request timeout and token budget; call counts logged | Eng |
+| R13 | PII in questions | Med | Med | Masked before storage and logging | Eng |
+| R14 | Low adoption on the floor | Med | High | Answers within seconds, plain English, tablet UI; track usage and helpful % | Plant Mgr |
+| R15 | Synthetic data differs from real binders | Certain | Med | Pilot with 2–3 real documents per category; re-run the golden set | Eng + SMEs |
 
 ## 4. Assumptions and limitations
 
 - All documents, queries and feedback are **synthetic** (`is_synthetic=1`).
 - The role selector is not authentication.
-- The LLM is mock-only. Answers are extractive quotes of the best sections, so they are reliable but not conversational.
-- BM25 keyword retrieval is suited to ~100 sections; larger corpora need hybrid search.
+- **Live-LLM quality is not yet measured.** The 32/32 result is from the mock and checks wiring.
+- Small-model answers can vary run to run, and their safety content must be checked.
+- BM25 plus query rewriting suits ~100 sections; larger corpora need hybrid search.
 - SQLite runs single-node and locally.

@@ -1,43 +1,45 @@
-# MIKRA: Architecture
+# MIKRA: Architecture (v2: AI-powered, supervised multi-agent)
 
-MIKRA (Manufacturing Intelligent Knowledge Routing Assistant) routes floor supervisors' questions to the right approved documentation and returns grounded, cited answers. All data is **synthetic**.
+MIKRA routes floor supervisors' questions to the right approved documentation using a small team of LLM agents, and returns grounded, cited answers. All data is **synthetic**.
+
+> **Build status.** The deterministic control plane, the rule-based pipeline (used as fallback), guardrails, audit, analytics and the UI contract are **built and tested**. The LLM agents (router, specialists, synthesizer) are **in build** and have not yet been measured with a live model.
 
 ## 1. Solution architecture
 
 ```mermaid
 %% name: architecture
-flowchart LR
-  S[Floor Supervisor] --> ASK[Ask page]
-  M[Plant Manager] --> ADM[Docs, Review, Analytics, Diagnostics]
-  ASK --> WF[Workflow]
-  WF --> G[Guardrails]
-  WF --> R[Router]
-  R --> RET[BM25 Retriever]
-  WF --> RET
-  WF --> L[LLM: mock or Claude]
-  WF --> AU[Audit]
-  ADM --> DA[Docs Admin]
-  ADM --> AN[Analytics]
-  ADM --> AU
-  DA --> RET
-  RET --> DB[(SQLite)]
-  DA --> DB
-  AN --> DB
-  AU --> DB
-  WF --> LOG[JSON Logs]
-  CFG[config.yaml] -.-> WF
+flowchart TD
+  S[Floor Supervisor] --> UI[Streamlit UI]
+  M[Plant Manager] --> UI
+  UI --> ORC[Orchestrator: plain code]
+  ORC --> GR[Guardrails]
+  ORC --> RA[Router Agent]
+  RA --> SP[Safety, Maintenance and Quality Agents]
+  SP --> TL[search_docs tool, read only]
+  TL --> IDX[(Published-only index)]
+  SP --> SY[Synthesizer Agent]
+  SY --> GC[Grounding check]
+  GC --> ORC
+  RA -.-> LLM[LLM API]
+  SP -.-> LLM
+  SY -.-> LLM
+  ORC --> DB[(SQLite: queries, audit, agent trace)]
+  ORC -.-> FB[Rule-based pipeline fallback]
 ```
 
-| Component | Responsibility | Business "why" |
-|---|---|---|
-| Workflow | Fixed pipeline: guardrails → route → retrieve → answer → grounding check → store | Predictable latency and cost; no runaway agent loop on the floor |
-| Guardrails | Length/type checks, prompt-injection and safety-bypass blocking, emergency detection, PII masking | Protects people and keeps logs compliant |
-| Router | Keyword rules + classifier (LLM or mock), blended; hazard terms force the Safety source in | Explainable, auditable routing; safety is never missed |
-| Retriever | BM25 over section-level chunks, **published documents only**, scoped to routed categories | Zero infrastructure; supervisors only see approved procedures |
-| LLM Client | `mock` (deterministic, extractive) or `anthropic`; strict JSON output, retry, fallback | Demo works offline; swap to a live model with one setting |
-| Docs Admin | Draft → manager approval → published (old version retired) → re-index | Only approved procedures reach the floor |
-| Audit | Every ask, feedback, review and publish recorded with actor, decision, model, request_id | Traceability for EHS/quality audits |
-| Analytics | KPIs, trends, recurring issues and documentation gaps computed from records | Managers spot recurring floor issues |
+| Component | Type | Responsibility | Business "why" |
+|---|---|---|---|
+| Orchestrator | Code | Runs the stages in a fixed order, dispatches specialists in parallel, enforces caps and timeouts, falls back on failure | Predictable behaviour; no runaway agent on the floor |
+| Guardrails | Code | Length and type checks, injection and safety-bypass blocking, emergency detection, PII masking | Protects people; keeps logs clean |
+| **Router agent** | LLM | Understands the question, picks the sources, extracts equipment, flags hazards, rewrites per-source search queries, asks for clarification | Handles messy wording that keywords miss |
+| **Specialist agents ×3** | LLM + tools | Each searches only its own manuals (max 3 steps) and returns cited findings or abstains | Domain focus; faster in parallel; fewer cross-source mistakes |
+| **Synthesizer agent** | LLM | Merges findings, safety first, notes conflicts and gaps, outputs strict JSON | One clear answer instead of three documents |
+| Hazard override | Code | Keyword rules ∪ router flag → Safety specialist always runs | A model slip can never drop the safety step |
+| Retriever | Code | BM25 over section chunks, **published documents only**, scoped per category | Supervisors only see approved procedures |
+| Grounding check | Code | Every citation must be a retrieved section, else drop it or abstain | Blocks invented sources |
+| Rule-based pipeline | Code | v1 router and extractive answer, used when agents fail or `agents.mode: pipeline` | The demo and the floor keep working if the LLM API fails |
+| Docs admin, Audit, Analytics | Code | Draft → approve → publish; audit trail; KPIs and recurring issues | Compliance and visibility for managers |
+| *Stretch:* Critic, Insights agent, embeddings | LLM | Claim checking, manager summaries and gap clustering, semantic search | Next quality and insight steps |
 
 ## 2. Data flow
 
@@ -45,27 +47,29 @@ flowchart LR
 %% name: data_flow
 flowchart TD
   Q[Supervisor question] --> V{Guardrails}
-  V -- injection or bad input --> B[Blocked + logged]
-  V -- ok --> E{Emergency?}
-  E -- yes --> EB[Red banner + emergency SOP]
-  E -- no --> RT[Route: rules + classifier]
-  EB --> RT
-  RT --> H{Hazard?}
-  H -- yes --> SF[Add Safety source]
-  H -- no --> RE[Retrieve published sections]
-  SF --> RE
-  RE --> T{Evidence strong enough?}
-  T -- no --> AB[Abstain: not in docs]
-  T -- yes --> GEN[Generate JSON answer]
-  GEN --> GC{Citations grounded?}
-  GC -- no --> AB
-  GC -- yes --> OUT[Answer + steps + safety notes + citations]
-  OUT --> ST[(Store query, citations, audit)]
+  V -- bad input or injection --> B[Blocked and logged]
+  V -- ok --> EM{Emergency?}
+  EM -- yes --> BN[Red banner and emergency SOP]
+  EM -- no --> RA[Router agent]
+  BN --> RA
+  RA --> CL{Clear enough?}
+  CL -- no --> ASK[Ask one clarifying question]
+  CL -- yes --> HZ{Hazard? rules or router}
+  HZ -- yes --> ADD[Force Safety specialist in]
+  HZ -- no --> SPEC[Specialists run in parallel]
+  ADD --> SPEC
+  SPEC --> SYN[Synthesizer agent]
+  SYN --> GCH{Citations grounded?}
+  GCH -- no --> AB[Abstain: not in docs]
+  GCH -- yes --> OUT[Answer, steps, safety notes, sources]
+  SPEC -. agent error or timeout .-> FBK[Fallback: rule-based pipeline]
+  FBK --> OUT
+  OUT --> ST[(Store query, trace, audit)]
   AB --> ST
   B --> ST
-  ST --> FB[Feedback: flag wrong answer]
-  FB --> HR[Manager review queue]
-  ST --> KPI[Analytics dashboard]
+  ST --> FDB[Feedback: flag wrong answer]
+  FDB --> HR[Manager review queue]
+  ST --> KPI[Analytics]
 ```
 
 ## 3. Request sequence (one question, end to end)
@@ -75,49 +79,70 @@ flowchart TD
 sequenceDiagram
   actor S as Supervisor
   participant UI as Streamlit
-  participant WF as Workflow
-  participant G as Guardrails
-  participant R as Router
-  participant RET as Retriever
-  participant L as LLM
+  participant O as Orchestrator
+  participant R as Router Agent
+  participant M as Maintenance Agent
+  participant F as Safety Agent
+  participant Y as Synthesizer
   participant DB as SQLite
-  S->>UI: How do I clear a jam on Conveyor C3?
-  UI->>WF: ask(question, role, user)
-  WF->>G: validate, mask PII, emergency check
-  G-->>WF: ok
-  WF->>R: route(question)
-  R-->>WF: maintenance + safety (hazard: jam)
-  WF->>RET: search(published, routed categories)
-  RET-->>WF: MM-CONV-02 s2, SOP-LOTO-04 s1
-  WF->>L: delimited docs + question
-  L-->>WF: JSON answer with citation ids
-  WF->>WF: schema check + grounding check
-  WF->>DB: query, citations, audit row
-  WF-->>UI: AskResponse
+  S->>UI: The belt on C3 is stuck
+  UI->>O: ask(question, role, user)
+  O->>O: guardrails and PII mask
+  O->>R: plan this question
+  R-->>O: maintenance and safety, hazard, queries
+  par Specialists in parallel
+    O->>M: research with search tool
+    M-->>O: cited findings
+  and
+    O->>F: research with search tool
+    F-->>O: cited findings
+  end
+  O->>Y: merge findings, safety first
+  Y-->>O: JSON answer with citation ids
+  O->>O: grounding check
+  O->>DB: query, citations, agent trace, audit
+  O-->>UI: AskResponse
   UI-->>S: Safety note, steps, sources
 ```
 
-## 4. File structure
+## 4. File structure (status in brackets)
 
 ```
 mfg-doc-router/
 ├── app/
-│   ├── main.py, pages/, ui/          Streamlit frontend (parallel session)
-│   ├── services/                     interface contract used by the UI
-│   │   ├── workflow.py               orchestration: ask(), health()
-│   │   ├── router.py                 rules + classifier + safety override
-│   │   ├── retriever.py              BM25 per category, published-only
-│   │   ├── llm.py                    mock / anthropic, prompts, JSON output
-│   │   ├── guardrails.py             validation, injection, emergency, PII
-│   │   ├── docs_admin.py             draft → approve → publish lifecycle
-│   │   ├── audit.py                  audit trail, feedback, review queue
-│   │   └── analytics.py              KPIs, trends, gaps, CSV
-│   ├── models/schemas.py             Pydantic contract
+│   ├── main.py, pages/, ui/          Streamlit frontend [separate session]
+│   ├── agents/                       [in build]
+│   │   ├── base.py                   agent runner: tool loop, caps, trace
+│   │   ├── prompts.py                prompts and PROMPT_VERSION
+│   │   ├── router_agent.py           RouterPlan
+│   │   ├── specialists.py            safety / maintenance / quality
+│   │   ├── synthesizer.py            merge, structured answer
+│   │   └── orchestrator.py           stages, parallelism, fallback
+│   ├── services/                     [built; llm.py and workflow.py being extended]
+│   │   ├── workflow.py               ask(): picks agents.mode
+│   │   ├── llm.py                    mock / openai / anthropic adapter
+│   │   ├── router.py, retriever.py, guardrails.py   (rule-based fallback, retrieval, guards)
+│   │   ├── docs_admin.py, audit.py, analytics.py
+│   ├── models/schemas.py             [built] Pydantic contract incl. AgentStep
 │   ├── data/db.py, seed_synthetic.py, corpus/*.md (18 synthetic docs + 1 draft)
-│   └── observability/logging.py      JSON logs with request_id
+│   └── observability/logging.py
 ├── evals/ golden.jsonl, run.py, results/
-├── tests/                            pytest (29 tests)
+├── tests/                            pytest
 ├── docs/                             design, architecture, data model, scope, risks, slide
 ├── scripts/                          render_mermaid.py, make_docx.py, make_pptx.py
 └── config.yaml, .env.example, requirements.txt, README.md
+```
+
+## 5. Configuration
+
+```yaml
+llm:
+  provider: openai            # openai | anthropic | mock   (key in .env only)
+agents:
+  mode: multi_agent           # multi_agent | pipeline (rule-based fallback)
+  timeout_s: 25
+  token_budget: 12000
+  router:       { model: gpt-4o-mini, max_tokens: 300 }
+  specialist:   { model: gpt-4o-mini, max_tokens: 700, max_steps: 3 }
+  synthesizer:  { model: gpt-4o-mini, max_tokens: 900 }
 ```

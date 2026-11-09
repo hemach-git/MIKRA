@@ -64,7 +64,7 @@ def main() -> None:
     # Header band
     box(s, 0, 0, 13.333, 1.15, fill=NAVY, shape=MSO_SHAPE.RECTANGLE)
     text(s, 0.45, 0.14, 9.5, 0.6, [("MIKRA: the right answer from the right manual", 28, WHITE, True)])
-    text(s, 0.45, 0.68, 10, 0.4, [("A plant-floor assistant that sends each question to Safety, Maintenance or Quality documents and answers with sources.", 13, RGBColor(0xCB, 0xD5, 0xE1), False)])
+    text(s, 0.45, 0.68, 10, 0.4, [("A team of AI agents that sends each question to the Safety, Maintenance or Quality manuals and answers with sources.", 13, RGBColor(0xCB, 0xD5, 0xE1), False)])
     tag = box(s, 10.55, 0.33, 2.4, 0.48, fill=ORANGE)
     tag.text_frame.text = "Prototype · synthetic data"
     for p in tag.text_frame.paragraphs:
@@ -83,9 +83,9 @@ def main() -> None:
 
     text(s, 4.75, 1.4, 8.2, 0.4, [("How it works", 16, ORANGE, True)])
     steps = [("1  Ask", "Type a question in plain words, e.g. \"Conveyor C3 is jammed\".", NAVY),
-             ("2  Route", "MIKRA picks the right source: Safety, Maintenance or Quality.", BLUE),
-             ("3  Answer", "Short answer, numbered steps and the exact page it came from.", GREEN),
-             ("4  Stay safe", "Risky task? The safety procedure is always shown first.", RED)]
+             ("2  Plan", "A router agent understands the question and picks the right manuals.", BLUE),
+             ("3  Research", "Expert agents search Safety, Maintenance and Quality at the same time.", GREEN),
+             ("4  Answer", "One clear answer with steps and sources. Safety always comes first.", RED)]
     for i, (h, body, col) in enumerate(steps):
         x = 4.75 + i * 2.07
         box(s, x, 1.85, 1.95, 2.1, fill=WHITE, line=col)
@@ -101,7 +101,7 @@ def main() -> None:
         ("Approve document updates, review flagged answers and see the top repeat problems (e.g. CNC-04 spindle alarms).", 12, GREY, False)])
 
     box(s, 4.75, 4.2, 4.1, 2.55, fill=LIGHT)
-    text(s, 4.95, 4.3, 3.8, 0.4, [("Test results (synthetic data)", 16, ORANGE, True)])
+    text(s, 4.95, 4.3, 3.8, 0.4, [("Tests so far (rule-based version)", 16, ORANGE, True)])
     kpis = [(f"{res['routing_accuracy']:.0f}%", "routed to the right source"),
             (f"{res['safety_inclusion_recall']:.0f}%", "risky tasks showed the safety step"),
             (f"{res['abstain_correctness']:.0f}%", "said \"not found\" instead of guessing"),
@@ -114,15 +114,16 @@ def main() -> None:
     text(s, 9.35, 4.3, 3.45, 2.4, [
         ("Built-in trust", 16, ORANGE, True),
         "Answers only from approved documents.",
-        "Every answer shows its source.",
+        "Every claim must cite a source.",
+        "Agents can read documents, never change them.",
         "Blocks requests to skip safety steps.",
         "Emergency? Shows \"call ext. 5555\" first.",
         "Every action is logged for audit."], size=12)
 
     # Footer
     text(s, 0.45, 6.88, 12.4, 0.5, [(
-        f"Next steps: connect the live AI model and re-test  ·  pilot with real documents from one line  ·  add sign-in  ·  "
-        f"Today: {res['passed']}/{res['total']} test questions passed using a test (mock) AI model, so these numbers check the setup, not the live model.",
+        f"Status: the rule-based version passed {res['passed']}/{res['total']} tests on a test (mock) model, so these numbers check the wiring only. "
+        f"The AI agents are being built and will be re-tested with the live model  ·  next: real documents, sign-in",
         10.5, GREY, False)])
 
     out = ROOT / "docs" / "one_pager.pptx"

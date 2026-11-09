@@ -54,6 +54,20 @@ class LLMAnswer(BaseModel):
     abstain: bool = False
 
 
+class AgentStep(BaseModel):
+    """One step in the agent trace (LLM call, tool call or deterministic guard)."""
+    seq: int = 0
+    agent: str                              # router | safety | maintenance | quality | synthesizer | orchestrator
+    kind: Literal["llm", "tool", "guard"] = "llm"
+    name: str = ""                          # e.g. search_docs, grounding_check
+    model: str | None = None
+    tokens_in: int = 0
+    tokens_out: int = 0
+    latency_ms: float = 0.0
+    status: Literal["ok", "error", "timeout", "skipped"] = "ok"
+    summary: str = ""                       # short, PII-masked, plain English
+
+
 class AskResponse(BaseModel):
     request_id: str
     query_id: str | None = None
@@ -76,6 +90,8 @@ class AskResponse(BaseModel):
     tokens_out: int = 0
     model: str = ""
     used_fallback: bool = False
+    mode: Literal["pipeline", "multi_agent"] = "pipeline"   # which engine answered
+    agent_trace: list[AgentStep] = []                       # empty in pipeline mode
 
 
 class DocumentIn(BaseModel):

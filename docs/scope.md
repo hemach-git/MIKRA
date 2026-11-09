@@ -1,8 +1,10 @@
-# MIKRA: Scope Document
+# MIKRA: Scope Document (v2: AI-powered, supervised multi-agent)
 
 **Project:** MIKRA (Manufacturing Intelligent Knowledge Routing Assistant)
 **Client problem:** A plant operator wants floor supervisors to get answers from the right documentation (safety procedures, maintenance manuals or quality control standards), routed automatically and answered accurately.
 **Engagement:** 2.5-hour prototype, local deployment only, **synthetic data**.
+
+> **Status.** The rule-based version (v1) is built and tested. The AI agent layer (v2) is **designed and in build**. Nothing in section 6 for v2 has been measured with a live model yet.
 
 ## 1. Business problem
 
@@ -16,68 +18,65 @@ Floor supervisors resolve issues during live production: jams, alarms, out-of-sp
 
 | User | Needs | What MIKRA gives them |
 |---|---|---|
-| Floor Supervisor (primary) | Fast, reliable answers during operations | One question box; routed, cited answer with steps; safety warnings first; "not found" instead of a guess |
+| Floor Supervisor (primary) | Fast, reliable answers during operations, even when the question is loosely worded | One question box; an AI agent team routes it, researches the right manuals and returns a cited answer with steps; safety first; "not found" instead of a guess |
 | Plant Operator / Manager (admin) | Keep documentation current; see recurring issues | Draft → approve → publish workflow; review queue for flagged answers; analytics of recurring issues and documentation gaps |
 
-## 3. In scope (delivered)
+## 3. How AI is used (v2)
 
-1. Question routing to Safety, Maintenance or Quality (more than one where needed). Explainable rules + classifier.
-2. **Safety override:** hazard-related tasks always include the safety procedure.
-3. Grounded answers with numbered steps, safety notes, citations (document, version, section) and a confidence level.
-4. **Abstain** when the documents don't cover the question.
-5. Guardrails:
-   - Prompt-injection and safety-bypass requests are blocked.
-   - Emergency detection shows the emergency contact banner.
-   - PII is masked in storage and logs.
-   - Document text is treated as untrusted.
-6. Document lifecycle: draft → manager approval → published (previous version retired). Supervisors only see published documents.
-7. Feedback (thumbs up / flag wrong). Flagged answers go to a manager review queue with an approve/reject decision.
-8. Audit trail (who, what, when, decision, model, request_id) and a per-run config snapshot.
-9. Analytics:
-   - KPIs: questions, answer rate, safety-routed %, p95 latency, helpful %.
-   - Daily trend, recurring issues by equipment, documentation gaps, most-cited documents.
-   - Drill-down and CSV export.
-10. Diagnostics: health, config, recent requests with stage timings, eval summary.
-11. Tests (29 pytest) and a golden eval set (32 cases) with a repeatable runner.
+| Capability | AI or code | Status |
+|---|---|---|
+| Understand intent, pick sources, extract equipment, rewrite search queries | **Router agent (LLM)** | In build |
+| Research each source with search tools, return cited findings | **Safety / Maintenance / Quality agents (LLM + tools)** | In build |
+| Merge findings into one structured, cited answer | **Synthesizer agent (LLM)** | In build |
+| Safety override, published-only filter, grounding check, step and token caps, approvals, audit | **Code (deliberately not AI)** | Built |
+| Rule-based router and extractive answer (fallback) | Code | Built, tested |
+| Critic agent, insights agent, semantic search, LLM judge | LLM | Stretch |
 
-## 4. Out of scope (this prototype)
+## 4. In scope
 
-- Live LLM. The `anthropic` provider is wired but **not yet validated**; mock only, by request. The live LLM eval is **deferred**.
+**Built and tested (v1)**
+1. Question routing to Safety, Maintenance or Quality (rules + classifier), with a hazard → Safety override.
+2. Grounded answers with steps, safety notes, citations and confidence; abstain when the documents don't cover the question.
+3. Guardrails: injection and bypass blocking, emergency banner, PII masking, untrusted document text.
+4. Document lifecycle: draft → manager approval → published (previous version retired). Supervisors see published documents only.
+5. Feedback, a manager review queue, an audit trail and a per-run config snapshot.
+6. Analytics: KPIs, trend, recurring issues, documentation gaps, drill-down and CSV export. Diagnostics page.
+7. 29 pytest tests and a 32-case golden eval set with a repeatable runner.
+
+**In build (v2)**
+8. Router agent, three specialist agents with a read-only search tool, and a synthesizer agent, on a provider-agnostic LLM interface (OpenAI `gpt-4o-mini` first).
+9. Supervised orchestration: stage order, parallel specialists, step and token caps, timeout, and automatic fallback to the v1 pipeline.
+10. Agent trace (per step: agent, model, tokens, latency, status) in the response, the logs and the Diagnostics page.
+11. About 10 paraphrase eval cases and a pipeline vs agent mode comparison.
+
+## 5. Out of scope (this prototype)
+
 - Real authentication or SSO (a role selector is used instead).
 - PDF/scanned document ingestion. Multiple languages and voice.
 - CMMS or work-order integration. Cloud deployment.
+- Long-term agent memory, and any agent that can write or publish.
+- Sending real plant documents to an external LLM (needs a data-handling review).
 
-## 5. Assumptions (illustrative)
+## 6. Assumptions and success criteria
 
-- 1 plant, ~40 supervisors, ~300 questions/day.
-- 18 synthetic documents (6 per category), ~70 sections.
-- Documents are written in Markdown with `## ` section headings.
-- English only. Tablet or desktop browser on the floor.
+**Assumptions (illustrative):** 1 plant, ~40 supervisors, ~300 questions/day, 18 synthetic documents (~70 sections), Markdown with `## ` headings, English only, tablet or desktop browser.
 
-## 6. Success criteria and results
+| Criterion | Target | v1 result (measured, mock LLM) | v2 result (live LLM) |
+|---|---|---|---|
+| Routing accuracy | ≥ 90% | 100% (20/20) | **not yet measured** |
+| Correct document cited | ≥ 85% | 100% | **not yet measured** |
+| Abstains when not in docs | 100% | 100% (5/5) | **not yet measured** |
+| Safety procedure included for hazards | 100% | 100% (5/5) | **not yet measured** |
+| Draft-document leaks | 0 | 0 | **not yet measured** |
+| Paraphrased questions routed correctly | ≥ 80% | n/a (rules can't) | **not yet measured** |
+| p95 latency | < 8 s agent mode | ~1 ms (mock pipeline) | **not yet measured** |
+| Automated tests | all pass | 29/29 | to extend |
 
-| Criterion | Target | Result (mock LLM, synthetic data) |
-|---|---|---|
-| Routing accuracy (golden set) | ≥ 90% | **100%** (20/20 routed cases) |
-| Correct document cited | ≥ 85% | **100%** |
-| Abstains when not in docs | 100% | **100%** (5/5) |
-| Safety procedure included for hazards | 100% | **100%** (5/5) |
-| Draft-document leaks | 0 | **0** |
-| p95 latency | < 5 s | **~1 ms** (mock; a live LLM will add ~1–3 s) |
-| Automated tests | all pass | **29/29** |
-
-> The eval pass rate (32/32) checks the **pipeline wiring** (routing, retrieval, guardrails, grounding), not live LLM answer quality. The mock is extractive and was written alongside the golden set.
+> The v1 pass rate (32/32) checks **pipeline wiring**, not AI quality. The mock is extractive and was written alongside the golden set. v2 numbers will be reported only after live runs.
 
 ## 7. Roadmap
 
-- **v0 (this prototype):** local, single plant, mock LLM, synthetic data, citations and approvals from day one.
-- **v1:**
-  - Connect the Claude API and run the live eval.
-  - SSO with role-based access.
-  - PDF ingestion with hybrid (keyword + vector) search and a reranker.
-  - Tablet UI tuned for the floor; multiple languages.
-  - Eval in CI.
-- **v2:**
-  - CMMS integration (auto-suggest work orders for recurring issues).
-  - Multi-plant rollout.
-  - Online evaluation from user feedback.
+- **v1 (built):** local, single plant, rule-based pipeline, mock LLM, citations and approvals from day one.
+- **v2 (in build):** LLM agents for routing, research and answers; agent trace; fallback to v1.
+- **v2 stretch:** critic agent, manager insights agent, embedding search, LLM judge for faithfulness.
+- **Next:** SSO, PDF ingestion, hybrid search, CMMS integration, multi-plant rollout, online evaluation from feedback.

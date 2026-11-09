@@ -88,6 +88,8 @@ Sidebar: MIKRA logo/title, **role selector** (Floor Supervisor / Plant Manager) 
    - Confidence badge.
    - Thumbs up / "Flag as wrong" with a comment, which calls `submit_feedback` and shows a success toast.
    - States: `abstained` → neutral info box with `abstain_reason`; `blocked` → warning; `error` → error box.
+   - **"How MIKRA answered" expander (new, v2):** if `resp.agent_trace` is non-empty, show a compact table (step, agent, model, tokens, ms, status) and a badge for `resp.mode` ("AI agents" or "Rule-based"). If `resp.used_fallback`, show a small note, "Answered by the backup method". Hide this for supervisors on small screens if it crowds the answer.
+   - **Clarifying question:** when `status == "abstained"` and `abstain_reason` ends with a question mark, show it as a prompt with a text box to reply, and re-ask with the combined text.
    - Small footer: request_id, latency, model.
    - Spinner while running. Keep a session history of the last 5 questions.
 2. **Documents.**

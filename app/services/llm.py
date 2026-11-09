@@ -90,6 +90,16 @@ def _sentences(text: str) -> list[str]:
     return [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
 
 
+def _focused(question: str, sents: list[str], k: int = 3) -> str:
+    """Query-focused extract: the k sentences sharing most terms with the question, in document order."""
+    from app.services.retriever import tokenize
+
+    q = set(tokenize(question))
+    scored = [(len(q & set(tokenize(s))), -i, i) for i, s in enumerate(sents)]
+    keep = sorted(i for _, _, i in sorted(scored, reverse=True)[:k])
+    return " ".join(sents[i] for i in keep)
+
+
 def mock_answer(question: str, chunks: list[dict], route_cats: list[str]) -> tuple[str, dict]:
     """Deterministic extractive answer: quotes the best sections; never invents content."""
     if not chunks:
@@ -99,7 +109,7 @@ def mock_answer(question: str, chunks: list[dict], route_cats: list[str]) -> tup
     lines = primary["text"].splitlines()
     steps = [m.group(1).strip() for ln in lines if (m := _STEP.match(ln))]
     prose = " ".join(ln.strip() for ln in lines if ln.strip() and not _STEP.match(ln) and not ln.startswith("WARNING"))
-    answer = " ".join(_sentences(prose)[:3]) or (f"Follow the steps in {primary['doc_key']} section '{primary['section']}'.")
+    answer = _focused(question, _sentences(prose)) or (f"Follow the steps in {primary['doc_key']} section '{primary['section']}'.")
     cites = [primary["chunk_id"]]
     for c in chunks:  # a strong second section from the same category
         if c is not primary and c["category"] == primary["category"] and c["score"] >= 0.75 * primary["score"]:

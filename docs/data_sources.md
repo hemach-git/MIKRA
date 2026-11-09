@@ -19,7 +19,7 @@ Equipment names (Press Line 2, CNC-04, Conveyor C3, …), people, extensions (ex
 | Role | Model | Status |
 |---|---|---|
 | Fallback pipeline and tests | `mock-extractive-v1` (deterministic, no AI) | Built, used by tests and evals today |
-| Router, specialists, synthesizer agents | `gpt-4o-mini` via the OpenAI API (set in `config.yaml`, key in `.env`) | **Built.** Live smoke call and 9-question smoke run OK; formal eval pending |
+| Router, specialists, synthesizer agents | `gpt-4o-mini` via the OpenAI API (set in `config.yaml`, key in `.env`) | **Built.** Live eval 43/45 on 45 synthetic cases |
 | Alternative provider | Anthropic Claude: v1 classifier and answer path only. **The agent chat adapter is not implemented**; adding it is a small change to `llm.chat` | Not validated |
 
 - **Config of record:** `config.yaml`. Its hash is stored on each `ask` audit row and in each eval result (`config_snapshot`). v2 adds the prompt version and the agent mode.

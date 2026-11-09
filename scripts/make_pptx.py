@@ -1,9 +1,9 @@
 """Final one-page slide for plant managers and business leaders (plain English, editable text boxes).
 
-    python scripts/make_pptx.py   ->  docs/one_pager.pptx
+    python scripts/make_pptx.py   ->  docs/one_pager_deck.pptx
 
 Numbers come from result files, never typed in by hand where a file exists:
-  - evals/results/latest.json               rule-based version on a test model (plumbing check only)
+  - evals/results/latest_pipeline.json      rule-based version on a test model (plumbing check only)
   - evals/results/latest_multi_agent.json   formal live-AI evaluation, used when it exists
 Without the live-AI file the slide shows the informal 9-question live check, labelled "quick check".
 """
@@ -93,7 +93,7 @@ def live_lines() -> list:
 
 
 def main() -> None:
-    res = json.loads((RESULTS / "latest.json").read_text(encoding="utf-8"))["summary"]
+    res = json.loads((RESULTS / ("latest_pipeline.json" if (RESULTS / "latest_pipeline.json").exists() else "latest.json")).read_text(encoding="utf-8"))["summary"]
     m = re.search(r"(\d+) passed", (ROOT / "tests" / "results" / "pytest_latest.txt").read_text(encoding="utf-8"))
     failed = re.search(r"(\d+) failed", (ROOT / "tests" / "results" / "pytest_latest.txt").read_text(encoding="utf-8"))
     n_pass = int(m.group(1)) if m else 0
@@ -175,7 +175,7 @@ def main() -> None:
         "Uses OpenAI gpt-4o-mini. Runs on a local computer. If the AI is unavailable, it falls back to a simple rule-based mode. "
         "All documents and data are synthetic (made up).", 12, GREY, False)])
 
-    out = ROOT / "docs" / "one_pager.pptx"
+    out = ROOT / "docs" / "one_pager_deck.pptx"
     tmp = out.with_name("_" + out.name)
     prs.save(tmp)
     tmp.replace(out)

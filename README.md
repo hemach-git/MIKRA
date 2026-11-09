@@ -10,12 +10,12 @@ Floor supervisors ask a plain-English question. A small team of **AI agents** ro
 
 | Part | Status |
 |---|---|
-| Rule-based pipeline, guardrails, document approvals, audit, analytics, feedback queue | **Built and tested** (29 tests, 32 evals, mock LLM) |
-| **LLM agents:** router, Safety / Maintenance / Quality specialists, synthesizer (OpenAI `gpt-4o-mini`) | **Built.** Tested offline (14 checks) and in an informal 9-question live quick check, not a full evaluation (7 answered with sources, 1 correct refusal, 1 wrong refusal). The formal live evaluation is run by a separate session; its results (`evals/results/latest_multi_agent.json`) were not available when this was written |
+| Rule-based pipeline, guardrails, document approvals, audit, analytics, feedback queue | **Built and tested** (54 automated tests; 32 rule-based evals on a mock model) |
+| **LLM agents:** router, Safety / Maintenance / Quality specialists, synthesizer (OpenAI `gpt-4o-mini`) | **Built**, tested offline with a scripted fake LLM and formally evaluated live on 45 golden cases: **43/45 passed (95.6%)** (see Evaluation results) |
 | Streamlit UI | **Built** (`app/main.py` plus Ask, Documents, Review queue, Analytics and Diagnostics pages). Not covered by the automated tests |
 | Critic agent, manager insights agent, embedding search, LLM judge | Not built in this prototype. A second AI check on answers is a next step |
 
-**No formal AI quality claims are made yet.** The 32/32 eval result checks the pipeline wiring on a mock model; the live numbers below come from a 9-question quick check only.
+**Two kinds of numbers, never mixed:** the 32/32 rule-based result checks the plumbing on a mock model (no AI). The live result (43/45) is the real `gpt-4o-mini` agents on synthetic data.
 
 **Next:** real documents from one plant line, sign-in, faster answers, a second AI check on answers.
 
@@ -89,18 +89,33 @@ More detail:
 | Draft-document leaks | 0 | 0 |
 | p95 latency (pipeline, mock) | ~1 ms | < 8 s agent mode |
 
-Case types: 15 positive, 5 multi-route (maintenance + safety), 5 negative, 7 edge (injection, emergency, draft leak, PII, bad input). Tests: **29/29 pass** (`tests/results/pytest_latest.txt`).
+Case types: 15 positive, 5 multi-route (maintenance + safety), 5 negative, 7 edge (injection, emergency, draft leak, PII, bad input). Tests: **54/54 pass** (`tests/results/pytest_latest.txt`).
 
 > ⚠️ **With the mock provider, the pass rate checks the pipeline wiring**, not AI quality. The mock is extractive and was written alongside the golden set.
 
-**v2 agents (live `gpt-4o-mini`): informal quick check only, not a full evaluation.** On 9 hand-picked questions:
-- 7 answered with grounded citations (including paraphrases such as "the belt on C3 is stuck"), 1 correct abstain (cafeteria menu), and 1 abstain on a vague question ("it is making a weird noise") that should have been a clarifying question.
-- Injection was blocked with no LLM call.
-- 3–4 LLM calls per question, ~1.4–3.5k tokens, **average 7.2 s and slowest 11.3 s** (target: under 8 s, so not met for hazard questions).
-- Known weaknesses: hazard questions sometimes pull in extra lockout steps or an unrelated warning (over-inclusion); latency is above target.
-- Bugs found and fixed in this run: citation IDs wrapped in tags made every answer abstain; the first search now runs in code to cut latency; a hazard now always carries a cited safety section.
+**v2 agents (live `gpt-4o-mini`), formal run: 43/45 passed (95.6%)** on the 45-case golden set. Result file: `evals/results/latest_multi_agent.json` (`python -m evals.run --mode multi_agent`, 2026-11-09).
 
-**Formal live evaluation:** run by a separate session on the golden set (`python -m evals.run`, mode comparison via `--compare`). Its result file `evals/results/latest_multi_agent.json` did not exist when this README was updated, so no formal live numbers are reported here. When it lands, `python scripts/make_pptx.py` picks it up automatically for the slide.
+| Metric | Live result | Target |
+|---|---|---|
+| Routing accuracy | 100% | ≥ 90% |
+| Correct document cited | 97.1% | ≥ 85% |
+| Abstain correctness (out-of-scope) | 100% | 100% |
+| Safety-inclusion recall (hazard tasks) | 100% | 100% |
+| Paraphrased questions | 100% | ≥ 80% |
+| Draft-document leaks | 0 | 0 |
+| Latency p50 / p95 | 5.8 s / 9.8 s | p95 < 8 s: **not met** |
+| LLM calls and tokens per question | ~3.0 calls, ~2,000 tokens | |
+| Estimated cost | ~$0.02 for the whole run (~$0.0005 per question; estimate from the price table in `evals/run.py`) | |
+| Fell back to rule-based mode | 0 cases | |
+
+By case type: hazard 66.7% (2 of 3), positive 93.3% (14 of 15), every other type 100%.
+
+**The 2 failures, and 1 warning**
+- **P11** "What dry film thickness is acceptable for paint?": the answer was missing the 60-80 micron value (incomplete answer).
+- **H02** "need to swap a seized roller under the C3 belt": the maintenance manual was not cited; only the emergency SOP was (missing citation).
+- 1 answer carried an irrelevant safety note (flagged as a warning, not a failure).
+
+The checks are routing, citation and keyword rules, not an AI judge, and the set is synthetic and small (45 cases).
 
 ## Governance
 
@@ -116,8 +131,8 @@ Case types: 15 positive, 5 multi-route (maintenance + safety), 5 negative, 7 edg
 ## Assumptions and limitations
 
 - The role selector is **not** authentication (a later version adds SSO).
-- Live-LLM answer quality is **not yet formally measured** (9-question quick check only). A small model can vary between runs, so safety content must be checked in the evals.
-- Live latency is above the 8 s goal for hazard questions (quick check: average 7.2 s, slowest 11.3 s).
+- Live quality was measured on 45 **synthetic** cases (43/45); it is not a guarantee for real documents. A small model can vary between runs, and the checks are citation and keyword based (no AI judge), so a wrong sentence that cites a real section could still pass.
+- Live latency misses the 8 s goal: p50 5.8 s, p95 9.8 s.
 - Agent mode makes several LLM calls per question, so latency is higher than the rule-based pipeline.
 - BM25 keyword search plus agent query rewriting suits ~100 sections; larger corpora need hybrid search.
 - SQLite, single node, local only. Markdown documents only (no PDF/OCR yet).
@@ -129,5 +144,5 @@ Case types: 15 positive, 5 multi-route (maintenance + safety), 5 negative, 7 edg
 | Scope | `docs/scope.md` / `.docx` |
 | Estimates and risks | `docs/estimates_risks.md` / `.docx` |
 | Design | `docs/design.md` / `.docx` |
-| One-page slide (plain English, for plant managers and business leaders) | `docs/one_pager.pptx` |
+| One-page slide (plain English, for plant managers and business leaders) | `docs/one_pager_deck.pptx` |
 | Session briefs | `docs/frontend_brief.md`, `docs/tests_evals_brief.md` |

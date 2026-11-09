@@ -1,8 +1,8 @@
 # MIKRA: Design v2 (AI-powered, supervised multi-agent)
 
 > **Status (2026-11-09).**
-> - **v1 (built, tested):** rule-based pipeline with a mock LLM. 29/29 tests and 32/32 evals pass, which checks the wiring only.
-> - **v2 (built):** LLM agents for routing, research and answer writing, plus the Streamlit UI. Checked live in an informal 9-question live quick check, not a full evaluation: 7 answered with sources, the off-topic (cafeteria) question correctly refused, 1 vague question refused instead of asking a follow-up; average 7.2 s, slowest 11.3 s. The formal live evaluation is run by a separate session; its results were not available when this was written.
+> - **v1 (built, tested):** rule-based pipeline with a mock LLM. 54 automated tests; 32/32 rule-based evals pass, which checks the wiring only.
+> - **v2 (built):** LLM agents for routing, research and answer writing, plus the Streamlit UI. **Formal live eval: 43/45 passed** on 45 synthetic cases (routing 100%, correct document cited 97.1%, abstain 100%, safety included 100%); p95 latency 9.8 s misses the 8 s goal.
 > - **Provider:** OpenAI `gpt-4o-mini` is the first target. The interface is provider-agnostic, so Claude plugs in the same way.
 
 Diagrams: [architecture.md](architecture.md) and [data_model.md](data_model.md). Agent interfaces: [agents_contract.md](agents_contract.md).
@@ -19,7 +19,7 @@ Diagrams: [architecture.md](architecture.md) and [data_model.md](data_model.md).
 - **R7.** Supervisors flag wrong answers; managers review them.
 - **R8.** Ambiguous question: ask one clarifying question, or search broadly and say so.
 - **R9 (stretch).** Manager insights: cluster unanswered questions into documentation gaps, summarize recurring issues, draft a document update (human approves).
-- **Non-functional:** p95 under 8 s in agent mode (p95 not yet measured; quick check average 7.2 s, slowest 11.3 s, so **not met** for slow hazard questions), under 1 s in the rule-based fallback, runs locally, no secrets in the repo, every request traceable.
+- **Non-functional:** p95 under 8 s in agent mode (**measured p95 9.8 s, p50 5.8 s: not met** for slow hazard questions), under 1 s in the rule-based fallback, runs locally, no secrets in the repo, every request traceable.
 
 **Never list**
 - NEVER give a safety answer without citing the safety procedure; never suggest skipping a safety step.

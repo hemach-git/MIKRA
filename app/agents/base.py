@@ -29,6 +29,18 @@ class Tool:
                                                  "parameters": self.parameters}}
 
 
+_CHUNK_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9\-]*-v\d+#s\d+")
+
+
+def clean_id(raw: str) -> str:
+    """Extract the bare chunk id from model output such as '<chunk id="MM-CONV-02-v1#s2">'.
+
+    Tolerant parsing only: the result must STILL be a retrieved chunk id (checked by the callers).
+    """
+    m = _CHUNK_ID.search(raw or "")
+    return m.group(0) if m else (raw or "").strip()
+
+
 def _extract_json(text: str) -> dict:
     m = re.search(r"\{.*\}", text or "", re.S)
     if not m:

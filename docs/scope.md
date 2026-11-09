@@ -4,7 +4,7 @@
 **Client problem:** A plant operator wants floor supervisors to get answers from the right documentation (safety procedures, maintenance manuals or quality control standards), routed automatically and answered accurately.
 **Engagement:** 2.5-hour prototype, local deployment only, **synthetic data**.
 
-> **Status.** The rule-based version (v1) is built and tested. The AI agent layer (v2) is **designed and in build**. Nothing in section 6 for v2 has been measured with a live model yet.
+> **Status.** The rule-based version (v1) is built and tested. The AI agent layer (v2) is **built** and was smoke-tested live on 9 questions (informal). Nothing in section 6 for v2 has been formally measured yet: the golden-set eval is pending.
 
 ## 1. Business problem
 

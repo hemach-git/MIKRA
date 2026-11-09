@@ -2,7 +2,7 @@
 
 > **Status (2026-11-09).**
 > - **v1 (built, tested):** rule-based pipeline with a mock LLM. 29/29 tests and 32/32 evals pass, which checks the wiring only.
-> - **v2 (this design, in build):** LLM agents for routing, research and answer writing. Not yet measured with a live model.
+> - **v2 (built):** LLM agents for routing, research and answer writing. Smoke-tested live on 9 questions (informal); the formal golden-set eval is still pending.
 > - **Provider:** OpenAI `gpt-4o-mini` is the first target. The interface is provider-agnostic, so Claude plugs in the same way.
 
 Diagrams: [architecture.md](architecture.md) and [data_model.md](data_model.md). Agent interfaces: [agents_contract.md](agents_contract.md).

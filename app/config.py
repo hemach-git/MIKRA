@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import json
 import os
 from functools import lru_cache
@@ -20,15 +21,25 @@ def _load_dotenv() -> None:
         line = line.strip()
         if line and not line.startswith("#") and "=" in line:
             k, v = line.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+            v = v.strip()
+            if v[:1] in ("'", '"'):                 # quoted value: take what is inside the quotes
+                q = v[0]
+                end = v.find(q, 1)
+                v = v[1:end] if end > 0 else v[1:]
+            else:                                   # unquoted: drop an inline "  # comment"
+                v = re.split(r"\s+#", v, maxsplit=1)[0].strip()
+            os.environ.setdefault(k.strip(), v)
 
 
 @lru_cache(maxsize=1)
 def get_config() -> dict:
     _load_dotenv()
     cfg = yaml.safe_load((ROOT / "config.yaml").read_text(encoding="utf-8"))
-    cfg["llm"]["provider"] = os.getenv("LLM_PROVIDER", cfg["llm"]["provider"]).lower()
+    cfg["llm"]["provider"] = (os.getenv("LLM_PROVIDER", cfg["llm"]["provider"]).split() or ["mock"])[0].lower()
     cfg["llm"]["model"] = os.getenv("LLM_MODEL", cfg["llm"]["model"])
+    if os.getenv("OPENAI_MODEL"):                    # one env var switches every agent's model
+        for role in ("router", "specialist", "synthesizer"):
+            cfg["agents"][role]["model"] = os.environ["OPENAI_MODEL"].strip()
     return cfg
 
 

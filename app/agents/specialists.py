@@ -4,7 +4,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from app.agents import prompts
-from app.agents.base import Tool, run_agent
+from app.agents.base import Tool, clean_id, run_agent
 from app.config import get_config
 from app.models.schemas import AgentStep
 from app.services import retriever
@@ -51,14 +51,18 @@ def research(category: str, question: str, search_query: str) -> tuple[Findings,
              {"type": "object", "properties": {"chunk_id": {"type": "string"}}, "required": ["chunk_id"]},
              read_section),
     ]
-    user = f"<question>\n{question}\n</question>\nSuggested search query: {search_query}"
+    # First search runs in code (deterministic) and is handed to the agent: most specialists then need ONE LLM call.
+    search_docs(search_query, 3)            # fills `retrieved`
+    full = "\n".join(_doc_tag(h, max_chars) for h in retrieved.values()) or "No matching sections found."
+    user = (f"<question>\n{question}\n</question>\nSuggested search query: {search_query}\n\n"
+            f"First search results:\n{full}")
     out, steps = run_agent(category, prompts.SPECIALIST_SYSTEM.format(category=category.capitalize()), user,
                            model=a["model"], max_tokens=a["max_tokens"], max_steps=a["max_steps"],
                            schema=Findings, tools=tools, )
     # Grounding at the source: keep only findings whose citations were actually retrieved by THIS agent.
     kept = []
     for f in out.findings:
-        ids = [c for c in dict.fromkeys(f.citation_ids) if c in retrieved]
+        ids = [c for c in dict.fromkeys(clean_id(x) for x in f.citation_ids) if c in retrieved]
         if ids:
             kept.append(Finding(claim=f.claim, citation_ids=ids))
     out.category, out.findings = category, kept

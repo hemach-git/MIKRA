@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from app.agents import prompts
-from app.agents.base import run_agent
+from app.agents.base import clean_id, run_agent
 from app.agents.router_agent import RouterPlan
 from app.agents.specialists import Findings, _doc_tag
 from app.config import get_config
@@ -26,5 +26,6 @@ def synthesize(question: str, plan: RouterPlan, findings: list[Findings], hazard
             + "\n".join(_doc_tag(h, cfg["retrieval"]["max_chunk_chars"]) for h in hits.values()))
     ans, steps = run_agent("synthesizer", prompts.SYNTH_SYSTEM, user, model=a["model"],
                            max_tokens=a["max_tokens"], max_steps=2, schema=LLMAnswer)
+    ans.citation_ids = list(dict.fromkeys(clean_id(x) for x in ans.citation_ids))
     steps[-1].summary = f"answer with {len(ans.citation_ids)} citations, confidence={ans.confidence}"
     return ans, steps, list(hits.values())

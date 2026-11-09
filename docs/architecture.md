@@ -2,7 +2,7 @@
 
 MIKRA routes floor supervisors' questions to the right approved documentation using a small team of LLM agents, and returns grounded, cited answers. All data is **synthetic**.
 
-> **Build status.** The deterministic control plane, the rule-based pipeline (used as fallback), guardrails, audit, analytics and the UI contract are **built and tested**. The LLM agents (router, specialists, synthesizer) are **in build** and have not yet been measured with a live model.
+> **Build status.** The deterministic control plane, the rule-based pipeline (used as fallback), guardrails, audit, analytics and the UI contract are **built and tested**. The LLM agents (router, specialists, synthesizer) are **built** and were smoke-tested live (informal, 9 questions); the formal eval is pending.
 
 ## 1. Solution architecture
 

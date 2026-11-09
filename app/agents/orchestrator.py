@@ -14,6 +14,7 @@ from app.agents import router_agent, specialists, synthesizer
 from app.agents.base import AgentError
 from app.config import get_config
 from app.models.schemas import CATEGORIES, AgentStep, LLMAnswer, RouteDecision
+from app.services import retriever
 from app.services import router as rules_router
 
 
@@ -101,6 +102,23 @@ def answer(question: str, emergency: bool = False) -> OrchestratorResult:
             trace += st
             found.append(f)
     _check_budget(trace, acfg["token_budget"])
+
+    # 3b. Safety evidence guarantee (CODE): a hazard task must carry a cited safety section even if the safety
+    #     specialist returned nothing. Evidence is a real, published section, so it is grounded by construction.
+    if hazard:
+        sf = next((f for f in found if f.category == "safety"), None)
+        if sf is None or not sf.findings:
+            qs = (plan.queries.get("safety") or "") + " " + question
+            top = retriever.search(qs, ["safety"], top_k=1)
+            if top:
+                h = top[0]
+                warn = [ln.replace("WARNING:", "").strip() for ln in h["text"].splitlines() if ln.startswith("WARNING")]
+                claim = warn[0] if warn else h["text"].splitlines()[0][:300]
+                added = specialists.Findings(category="safety", abstain=False, chunks=[h],
+                                             findings=[specialists.Finding(claim=claim, citation_ids=[h["chunk_id"]])])
+                found = [f for f in found if f.category != "safety"] + [added]
+                trace.append(AgentStep(agent="orchestrator", kind="guard", name="safety_evidence_added",
+                                       summary=f"Added {h['doc_key']} - {h['section']} (safety specialist found nothing)"))
 
     # 4. Synthesizer (skipped when no specialist found anything: abstain)
     useful = [f for f in found if f.findings]

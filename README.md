@@ -11,7 +11,7 @@ Floor supervisors ask a plain-English question. A small team of **AI agents** ro
 | Part | Status |
 |---|---|
 | Rule-based pipeline, guardrails, document approvals, audit, analytics, feedback queue | **Built and tested** (29 tests, 32 evals, mock LLM) |
-| **LLM agents:** router, Safety / Maintenance / Quality specialists, synthesizer (OpenAI `gpt-4o-mini`) | **In build. Not yet measured with a live model** |
+| **LLM agents:** router, Safety / Maintenance / Quality specialists, synthesizer (OpenAI `gpt-4o-mini`) | **Built.** Tested offline (14 checks) and smoke-tested live on 9 questions (informal). **Formal golden-set eval pending** |
 | Streamlit UI | Being built in a separate session |
 | Critic agent, manager insights agent, embedding search, LLM judge | Stretch goals, not started |
 
@@ -91,7 +91,14 @@ Case types: 15 positive, 5 multi-route (maintenance + safety), 5 negative, 7 edg
 
 > ⚠️ **With the mock provider, the pass rate checks the pipeline wiring**, not AI quality. The mock is extractive and was written alongside the golden set.
 
-**v2 agents (live `gpt-4o-mini`): not yet measured.** Planned: about 10 paraphrase cases that keyword routing cannot pass, and a side-by-side `pipeline` vs `multi_agent` comparison (`python -m evals.run --compare`). Results will be added here after a live run, failures included.
+**v2 agents (live `gpt-4o-mini`): informal smoke run only, not a measured eval.** On 9 hand-picked questions:
+- 7 answered with grounded citations (including paraphrases such as "the belt on C3 is stuck"), 1 correct abstain (cafeteria menu), and 1 abstain on a vague question ("it is making a weird noise") that should have been a clarifying question.
+- Injection was blocked with no LLM call.
+- 3–4 LLM calls per question, ~1.4–3.5k tokens, **average 7.2 s and slowest 11.3 s** (target: under 8 s, so not met for hazard questions).
+- Known weaknesses: hazard questions sometimes pull in extra lockout steps or an unrelated warning (over-inclusion); latency is above target.
+- Bugs found and fixed in this run: citation IDs wrapped in tags made every answer abstain; the first search now runs in code to cut latency; a hazard now always carries a cited safety section.
+
+Still planned: about 10 paraphrase cases that keyword routing cannot pass, and a side-by-side `pipeline` vs `multi_agent` comparison (`python -m evals.run --compare`). Results will be added here after a live run, failures included.
 
 ## Governance
 

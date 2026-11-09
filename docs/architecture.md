@@ -110,15 +110,15 @@ sequenceDiagram
 ```
 mfg-doc-router/
 ├── app/
-│   ├── main.py, pages/, ui/          Streamlit frontend [separate session]
-│   ├── agents/                       [in build]
+│   ├── main.py, pages/, ui/          Streamlit frontend [built]
+│   ├── agents/                       [built]
 │   │   ├── base.py                   agent runner: tool loop, caps, trace
 │   │   ├── prompts.py                prompts and PROMPT_VERSION
 │   │   ├── router_agent.py           RouterPlan
 │   │   ├── specialists.py            safety / maintenance / quality
 │   │   ├── synthesizer.py            merge, structured answer
 │   │   └── orchestrator.py           stages, parallelism, fallback
-│   ├── services/                     [built; llm.py and workflow.py being extended]
+│   ├── services/                     [built]
 │   │   ├── workflow.py               ask(): picks agents.mode
 │   │   ├── llm.py                    mock / openai / anthropic adapter
 │   │   ├── router.py, retriever.py, guardrails.py   (rule-based fallback, retrieval, guards)

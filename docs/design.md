@@ -2,7 +2,7 @@
 
 > **Status (2026-11-09).**
 > - **v1 (built, tested):** rule-based pipeline with a mock LLM. 29/29 tests and 32/32 evals pass, which checks the wiring only.
-> - **v2 (built):** LLM agents for routing, research and answer writing. Smoke-tested live on 9 questions (informal); the formal golden-set eval is still pending.
+> - **v2 (built):** LLM agents for routing, research and answer writing, plus the Streamlit UI. Checked live in an informal 9-question live quick check, not a full evaluation: 7 answered with sources, the off-topic (cafeteria) question correctly refused, 1 vague question refused instead of asking a follow-up; average 7.2 s, slowest 11.3 s. The formal live evaluation is run by a separate session; its results were not available when this was written.
 > - **Provider:** OpenAI `gpt-4o-mini` is the first target. The interface is provider-agnostic, so Claude plugs in the same way.
 
 Diagrams: [architecture.md](architecture.md) and [data_model.md](data_model.md). Agent interfaces: [agents_contract.md](agents_contract.md).
@@ -19,7 +19,7 @@ Diagrams: [architecture.md](architecture.md) and [data_model.md](data_model.md).
 - **R7.** Supervisors flag wrong answers; managers review them.
 - **R8.** Ambiguous question: ask one clarifying question, or search broadly and say so.
 - **R9 (stretch).** Manager insights: cluster unanswered questions into documentation gaps, summarize recurring issues, draft a document update (human approves).
-- **Non-functional:** p95 under 8 s in agent mode (**to be measured**), under 1 s in the rule-based fallback, runs locally, no secrets in the repo, every request traceable.
+- **Non-functional:** p95 under 8 s in agent mode (p95 not yet measured; quick check average 7.2 s, slowest 11.3 s, so **not met** for slow hazard questions), under 1 s in the rule-based fallback, runs locally, no secrets in the repo, every request traceable.
 
 **Never list**
 - NEVER give a safety answer without citing the safety procedure; never suggest skipping a safety step.
@@ -122,7 +122,7 @@ Also tracked per question: tokens, LLM calls, and estimated cost.
 | Latency vs depth | Parallel specialists, capped steps | Deeper multi-step research | A supervisor needs an answer in seconds |
 | Vendor | OpenAI today (the key available) | Claude today | The adapter keeps Claude swappable; compare both on the golden set later |
 
-## 7. Build plan (60-minute window, parallel sessions)
+## 7. Build plan (60-minute window, parallel sessions; executed)
 
 | Session | Owns | Job |
 |---|---|---|
@@ -131,5 +131,6 @@ Also tracked per question: tokens, LLM calls, and estimated cost.
 | Tests + evals | `tests/*`, `evals/*` | Fake-LLM agent tests, paraphrase cases, mode comparison |
 
 **MVP:** router, three specialists, synthesizer, fallback switch.
-**Stretch, in order:** critic, insights agent, embeddings, LLM judge.
+**Stretch (not built):** critic, insights agent, embeddings, LLM judge.
+**Next:** real documents from one plant line, sign-in, faster answers, a second AI check on answers (the critic).
 The rule-based pipeline stays behind `agents.mode: pipeline` as the safety net.

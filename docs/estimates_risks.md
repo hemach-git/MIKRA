@@ -33,8 +33,8 @@
 | R4 | Prompt injection via question, document or tool result | Med | Med | Patterns blocked before any LLM call; text delimited as untrusted; agents have read-only tools; document scan flags embedded instructions | Eng |
 | R5 | Supervisor relies on MIKRA in an emergency | Low | **High** | Emergency banner first; emergency SOP cited | EHS |
 | R6 | Keyword search misses synonyms | Med | Med | Router agent rewrites queries; embeddings are a stretch goal; documentation-gaps report shows misses | Eng |
-| R7 | **Agent latency above target** (several sequential calls) | Med | Med | Parallel specialists; token caps; small model; fallback to the rule-based pipeline; streaming in the next version | Eng |
-| R8 | **First live LLM run, little time to tune prompts** | **High** | Med | Rule-based fallback behind a config flag; smoke test first; eval-gate before any quality claim | Eng |
+| R7 | **Agent latency above target** (several sequential calls). Quick check: average 7.2 s, slowest 11.3 s vs an 8 s goal | **High (observed)** | Med | Parallel specialists; token caps; small model; fallback to the rule-based pipeline; streaming in the next version | Eng |
+| R8 | **First live LLM run, little time to tune prompts.** Quick check found 1 vague question refused instead of a follow-up, and extra lockout steps in some answers | **High** | Med | Rule-based fallback behind a config flag; quick check done; formal live eval (separate session) gates any quality claim | Eng |
 | R9 | **Non-deterministic evals** (flaky results) | Med | Med | Temperature 0; repeat failing cases; report counts, not only percentages | Eng |
 | R10 | **Data leaves the machine** (question and sections sent to the LLM API) | Certain (live mode) | Med | Synthetic data only today; PII masked; real documents need a data-handling and vendor review | Security |
 | R11 | **API key or access problems** (key expiry, quota, outage) | Med | Med | Key in `.env` only; fallback pipeline; provider-agnostic adapter | Eng |
@@ -47,7 +47,7 @@
 
 - All documents, queries and feedback are **synthetic** (`is_synthetic=1`).
 - The role selector is not authentication.
-- **Live-LLM quality is not yet measured.** The 32/32 result is from the mock and checks wiring.
+- **Live-LLM quality is not yet formally measured.** The 32/32 result is from the mock and checks wiring; the live figures are from an informal 9-question live quick check, not a full evaluation.
 - Small-model answers can vary run to run, and their safety content must be checked.
 - BM25 plus query rewriting suits ~100 sections; larger corpora need hybrid search.
 - SQLite runs single-node and locally.

@@ -8,3 +8,4 @@ evals/results/tmp/
 *.db
 .venv/
 ~$*
+evals/results/run_*.json

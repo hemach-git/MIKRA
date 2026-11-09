@@ -20,20 +20,20 @@ class ToolCall(BaseModel): id: str; name: str; arguments: dict
 class ChatResult(BaseModel):
     text: str; tool_calls: list[ToolCall]; tokens_in: int; tokens_out: int; model: str; latency_ms: float
 
-def chat(messages: list[dict], *, model: str, tools: list[dict] | None = None,
-         response_schema: dict | None = None, max_tokens: int = 700, temperature: float = 0.0) -> ChatResult
+def chat(messages: list[dict], *, model: str, tools: list[dict] | None = None, json_mode: bool = False,
+         max_tokens: int = 700, temperature: float = 0.0) -> ChatResult      # OpenAI message / tool format
 ```
 
-- Providers: `openai`, `anthropic`, `mock` (selected by `LLM_PROVIDER`).
-- **Tests replace `llm.chat` with a scripted fake** (`monkeypatch.setattr(llm, "chat", fake)`). No network in unit tests.
+- `chat` is implemented for `openai` only. `mock` has no chat: **agents are enabled only when `LLM_PROVIDER` is a live provider** (`app.agents.enabled()`), otherwise the rule-based pipeline answers.
+- **Tests replace `llm.chat` with a scripted fake** and switch agents on with `monkeypatch.setattr(llm, "provider", lambda: "openai")`. No network in unit tests. A working example is `scripts/agent_smoke.py` (14 checks).
 
 ## Agents (`app/agents/`)
 
 ```python
 # base.py
-def run_agent(name: str, system: str, user: str, *, tools: list | None, model: str,
-              max_steps: int, schema: type[BaseModel]) -> tuple[BaseModel, list[AgentStep]]
-    # tool loop with step cap, schema validation + 1 retry; raises AgentError on failure
+class Tool: name: str; description: str; parameters: dict; fn: Callable[..., str]
+def run_agent(name, system, user, *, model, max_tokens, max_steps, schema, tools=None) -> tuple[BaseModel, list[AgentStep]]
+    # tool loop; last step offers no tools; invalid JSON -> one correction round; raises AgentError
 
 # router_agent.py
 class RouterPlan(BaseModel):
@@ -43,15 +43,15 @@ def plan(question: str) -> tuple[RouterPlan, list[AgentStep]]
 
 # specialists.py
 class Finding(BaseModel): claim: str; citation_ids: list[str]
-class Findings(BaseModel): category: Category; findings: list[Finding]; abstain: bool
+class Findings(BaseModel): category: str; findings: list[Finding]; abstain: bool; chunks: list[dict]  # chunks set by code
 def research(category: str, question: str, search_query: str) -> tuple[Findings, list[AgentStep]]
     # tools: search_docs(query, top_k), read_section(chunk_id); both limited to `category`, published only
 
 # synthesizer.py
-def synthesize(question: str, plan: RouterPlan, findings: list[Findings]) -> tuple[LLMAnswer, list[AgentStep]]
+def synthesize(question, plan, findings, hazard) -> tuple[LLMAnswer, list[AgentStep], list[dict]]   # 3rd = cited chunks (grounding set)
 
 # orchestrator.py
-def answer(question: str, role: str) -> OrchestratorResult   # chosen categories, LLMAnswer, hits, trace, used_fallback
+def answer(question: str, emergency: bool = False) -> OrchestratorResult   # decision, answer, hits, trace, tokens, equipment, clarify
 ```
 
 ## Orchestrator rules (code, not model)

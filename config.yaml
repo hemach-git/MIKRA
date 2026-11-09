@@ -45,3 +45,14 @@ equipment:
   - Forklift
   - Weld Shop
   - Assembly Line A
+
+# ---- v2 multi-agent layer (active only when llm.provider != mock) ----
+agents:
+  mode: multi_agent         # multi_agent | pipeline (rule-based fallback)
+  prompt_version: "v2.0"
+  timeout_s: 25
+  token_budget: 12000       # total tokens (in+out) per question across all agents
+  min_clarify_confidence: 0.5
+  router:      { model: gpt-4o-mini, max_tokens: 350 }
+  specialist:  { model: gpt-4o-mini, max_tokens: 700, max_steps: 3 }
+  synthesizer: { model: gpt-4o-mini, max_tokens: 900 }

@@ -16,6 +16,9 @@ from app.data import db
 from app.models.schemas import AskRequest, AskResponse, Citation, LLMAnswer
 from app.observability.logging import log_event, new_request_id
 from app.services import audit, guardrails, llm, retriever, router
+from app.agents import enabled as agents_enabled
+from app.agents import orchestrator
+from app.agents.prompts import PROMPT_VERSION
 
 _ready = False
 
@@ -100,58 +103,81 @@ def ask(question: str, role: str = "supervisor", user: str = "demo.supervisor",
 
         resp.equipment_tag = _equipment_tag(req.question)
 
-        # 2. Route
-        t = time.perf_counter()
-        decision, rusage = router.route(req.question)
-        if resp.emergency and "safety" not in decision.categories:
-            decision.categories.insert(0, "safety")
-            decision.primary = "safety"
-            decision.safety_flag = True
-        resp.route = decision
-        usage_in += rusage.get("tokens_in", 0)
-        usage_out += rusage.get("tokens_out", 0)
-        stage["route"] = _ms(t)
-
-        # 3. Retrieve (published docs only, routed categories only)
-        t = time.perf_counter()
-        hits = retriever.search(req.question, decision.categories, top_k=cfg["retrieval"]["top_k_per_category"])
-        # Keep the primary category's evidence first, then others; cap context size.
-        hits.sort(key=lambda h: (h["category"] != decision.primary, -h["score"]))
-        hits = hits[: cfg["retrieval"]["max_context_chunks"]]
-        stage["retrieve"] = _ms(t)
-        primary_hits = [h for h in hits if h["category"] == decision.primary] or hits
-        reason = _abstain_reason(sorted(primary_hits, key=lambda h: -h["score"]) if not decision.broad_search
-                                 else sorted(hits, key=lambda h: -h["score"]))
-        if reason and not resp.emergency:
-            resp.status, resp.abstain_reason = "abstained", reason + " Please contact your area lead or the document owner."
-            resp.answer = "Not found in the approved documentation."
-            return _finish(resp, req, t0, stage, is_synthetic, created_at, [], usage_in, usage_out)
-        if resp.emergency:
-            # Emergency: ensure the emergency procedure is evidence #1 for the answer.
-            em = retriever.search(req.question + " emergency", ["safety"], top_k=2)
-            hits = em + [h for h in hits if h["chunk_id"] not in {e["chunk_id"] for e in em}]
-            decision.primary = "safety"
-
-        # 4. Generate (structured JSON, validate, retry once, fall back to extractive)
-        t = time.perf_counter()
-        ans: LLMAnswer | None = None
-        for attempt in range(cfg["llm"]["max_retries"] + 1):
+        # 2-4. Agent path (live LLM) with automatic fallback to the rule-based pipeline
+        agent_res = None
+        if agents_enabled():
+            t = time.perf_counter()
             try:
-                raw, usage = llm.generate_answer(req.question, hits, decision.categories if not resp.emergency
-                                                 else ["safety"] + [c for c in decision.categories if c != "safety"])
-                usage_in += usage.get("tokens_in", 0)
-                usage_out += usage.get("tokens_out", 0)
+                agent_res = orchestrator.answer(req.question, emergency=resp.emergency)
+            except Exception as e:  # AgentError, timeout, budget, provider error -> rule-based pipeline
+                resp.used_fallback = True
+                resp.guardrail_flags.append("agent_fallback")
+                log_event("agent_fallback", rid, error=type(e).__name__, detail=str(e)[:200])
+            stage["agents"] = _ms(t)
+        if agent_res is not None:
+            decision, hits, ans = agent_res.decision, agent_res.hits, agent_res.answer
+            resp.mode, resp.agent_trace, resp.route = "multi_agent", agent_res.trace, decision
+            usage_in += agent_res.tokens_in
+            usage_out += agent_res.tokens_out
+            if agent_res.equipment and not resp.equipment_tag:
+                resp.equipment_tag = agent_res.equipment
+            if agent_res.clarify:
+                resp.status, resp.answer = "abstained", "I need a little more detail to find the right procedure."
+                resp.abstain_reason = agent_res.clarify
+                return _finish(resp, req, t0, stage, is_synthetic, created_at, [], usage_in, usage_out)
+        else:
+            # 2. Route
+            t = time.perf_counter()
+            decision, rusage = router.route(req.question)
+            if resp.emergency and "safety" not in decision.categories:
+                decision.categories.insert(0, "safety")
+                decision.primary = "safety"
+                decision.safety_flag = True
+            resp.route = decision
+            usage_in += rusage.get("tokens_in", 0)
+            usage_out += rusage.get("tokens_out", 0)
+            stage["route"] = _ms(t)
+
+            # 3. Retrieve (published docs only, routed categories only)
+            t = time.perf_counter()
+            hits = retriever.search(req.question, decision.categories, top_k=cfg["retrieval"]["top_k_per_category"])
+            # Keep the primary category's evidence first, then others; cap context size.
+            hits.sort(key=lambda h: (h["category"] != decision.primary, -h["score"]))
+            hits = hits[: cfg["retrieval"]["max_context_chunks"]]
+            stage["retrieve"] = _ms(t)
+            primary_hits = [h for h in hits if h["category"] == decision.primary] or hits
+            reason = _abstain_reason(sorted(primary_hits, key=lambda h: -h["score"]) if not decision.broad_search
+                                     else sorted(hits, key=lambda h: -h["score"]))
+            if reason and not resp.emergency:
+                resp.status, resp.abstain_reason = "abstained", reason + " Please contact your area lead or the document owner."
+                resp.answer = "Not found in the approved documentation."
+                return _finish(resp, req, t0, stage, is_synthetic, created_at, [], usage_in, usage_out)
+            if resp.emergency:
+                # Emergency: ensure the emergency procedure is evidence #1 for the answer.
+                em = retriever.search(req.question + " emergency", ["safety"], top_k=2)
+                hits = em + [h for h in hits if h["chunk_id"] not in {e["chunk_id"] for e in em}]
+                decision.primary = "safety"
+
+            # 4. Generate (structured JSON, validate, retry once, fall back to extractive)
+            t = time.perf_counter()
+            ans: LLMAnswer | None = None
+            for attempt in range(cfg["llm"]["max_retries"] + 1):
+                try:
+                    raw, usage = llm.generate_answer(req.question, hits, decision.categories if not resp.emergency
+                                                     else ["safety"] + [c for c in decision.categories if c != "safety"])
+                    usage_in += usage.get("tokens_in", 0)
+                    usage_out += usage.get("tokens_out", 0)
+                    ans = _validate_llm(raw)
+                    break
+                except (ValidationError, ValueError, json.JSONDecodeError, KeyError) as e:
+                    log_event("llm_output_invalid", rid, attempt=attempt, error=type(e).__name__)
+                except Exception as e:  # provider/network error
+                    log_event("llm_error", rid, attempt=attempt, error=type(e).__name__)
+            if ans is None:
+                raw, _ = llm.mock_answer(req.question, hits, decision.categories)
                 ans = _validate_llm(raw)
-                break
-            except (ValidationError, ValueError, json.JSONDecodeError, KeyError) as e:
-                log_event("llm_output_invalid", rid, attempt=attempt, error=type(e).__name__)
-            except Exception as e:  # provider/network error
-                log_event("llm_error", rid, attempt=attempt, error=type(e).__name__)
-        if ans is None:
-            raw, _ = llm.mock_answer(req.question, hits, decision.categories)
-            ans = _validate_llm(raw)
-            resp.used_fallback = True
-        stage["generate"] = _ms(t)
+                resp.used_fallback = True
+            stage["generate"] = _ms(t)
 
         # 5. Grounding check: every citation must be a retrieved chunk; else abstain (fail closed)
         by_id = {h["chunk_id"]: h for h in hits}
@@ -214,7 +240,8 @@ def _finish(resp: AskResponse, req: AskRequest, t0: float, stage: dict, is_synth
                           (qid, cit.chunk_id, i, cit.score))
             audit.record(req.user, req.role, "ask", qid, resp.status, resp.model, resp.request_id,
                          {"categories": r.categories if r else [], "citations": [x.chunk_id for x in citations],
-                          "config_hash": config_hash(), "flags": resp.guardrail_flags}, conn=c)
+                          "config_hash": config_hash(), "flags": resp.guardrail_flags, "mode": resp.mode,
+                          "prompt_version": PROMPT_VERSION}, conn=c)
         resp.query_id = qid
     except Exception as e:
         log_event("persist_error", resp.request_id, error=type(e).__name__, detail=str(e)[:200])
@@ -222,7 +249,8 @@ def _finish(resp: AskResponse, req: AskRequest, t0: float, stage: dict, is_synth
         log_event("ask", resp.request_id, user_role=req.role, status=resp.status,
                   categories=r.categories if r else [], route_confidence=r.confidence if r else None,
                   latency_ms=resp.latency_ms, stage_ms=stage, tokens_in=tin, tokens_out=tout, model=resp.model,
-                  flags=resp.guardrail_flags, question=resp.question[:120], error=error)
+                  flags=resp.guardrail_flags, question=resp.question[:120], error=error, mode=resp.mode,
+                  agent_steps=[x.model_dump() for x in resp.agent_trace])
     return resp
 
 

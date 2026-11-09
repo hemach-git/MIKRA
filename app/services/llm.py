@@ -132,3 +132,61 @@ def mock_answer(question: str, chunks: list[dict], route_cats: list[str]) -> tup
     text = json.dumps(out)
     return text, {"tokens_in": _est_tokens(build_user_prompt(question, chunks)), "tokens_out": _est_tokens(text),
                   "estimated": True}
+
+
+# ================================================================== v2: provider-agnostic chat for agents
+import time  # noqa: E402
+
+from pydantic import BaseModel  # noqa: E402
+
+
+class ToolCall(BaseModel):
+    id: str
+    name: str
+    arguments: dict
+
+
+class ChatResult(BaseModel):
+    text: str = ""
+    tool_calls: list[ToolCall] = []
+    tokens_in: int = 0
+    tokens_out: int = 0
+    model: str = ""
+    latency_ms: float = 0.0
+
+
+def chat(messages: list[dict], *, model: str, tools: list[dict] | None = None, json_mode: bool = False,
+         max_tokens: int = 700, temperature: float = 0.0) -> ChatResult:
+    """One chat completion in OpenAI message format. Tests replace this function with a scripted fake.
+
+    The mock provider has no chat: agents are only enabled for live providers (see app.agents.enabled).
+    """
+    p = provider()
+    if p == "openai":
+        return _openai_chat(messages, model, tools, json_mode, max_tokens, temperature)
+    raise NotImplementedError(f"agent chat is not implemented for provider '{p}'")
+
+
+def _openai_chat(messages, model, tools, json_mode, max_tokens, temperature) -> ChatResult:
+    from openai import OpenAI  # lazy import
+
+    cfg = get_config()
+    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"], timeout=cfg["agents"]["timeout_s"])
+    kwargs: dict = dict(model=model, messages=messages, max_tokens=max_tokens, temperature=temperature)
+    if tools:
+        kwargs["tools"] = tools
+    elif json_mode:
+        kwargs["response_format"] = {"type": "json_object"}
+    t = time.perf_counter()
+    r = client.chat.completions.create(**kwargs)
+    msg = r.choices[0].message
+    calls = []
+    for tc in (msg.tool_calls or []):
+        try:
+            args = json.loads(tc.function.arguments or "{}")
+        except json.JSONDecodeError:
+            args = {}
+        calls.append(ToolCall(id=tc.id, name=tc.function.name, arguments=args if isinstance(args, dict) else {}))
+    return ChatResult(text=msg.content or "", tool_calls=calls, tokens_in=r.usage.prompt_tokens,
+                      tokens_out=r.usage.completion_tokens, model=r.model,
+                      latency_ms=round((time.perf_counter() - t) * 1000, 1))

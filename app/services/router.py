@@ -30,7 +30,9 @@ RULES: dict[str, list[str]] = {
 HAZARD = [r"clear(ing)? (a |the )?jam", r"\bjam", r"reach (in|into)", r"die change", r"change (the )?die",
           r"enter(ing)? (the )?(cell|enclosure|booth)", r"hydraulic leak", r"oil leak", r"electrical",
           r"energi[sz]ed", r"chemical", r"solvent", r"spill", r"\bfire\b", r"injur", r"guard", r"forklift",
-          r"light curtain", r"interlock", r"replace (the )?(belt|bearing|tip|roller)", r"lock ?out", r"\bloto\b"]
+          r"light curtain", r"interlock", r"replace (the )?(belt|bearing|tip|roller)", r"lock ?out", r"\bloto\b",
+          r"\bstuck\b", r"\bunjam", r"\bclear(ing)?\b", r"\b(fix|repair|adjust|unclog)\b", r"\bclean(ing)?\b",
+          r"\bremov(e|ing)\b", r"\bpiling up\b", r"\bpressure (loss|drop)", r"\boverheat", r"\brunning hot\b"]
 
 
 def rule_scores(question: str) -> dict[str, float]:

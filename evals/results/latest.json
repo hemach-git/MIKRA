@@ -1,9 +1,9 @@
 {
   "summary": {
-    "run_at": "2026-11-09T16:02:14+00:00",
+    "run_at": "2026-11-09T16:32:28+00:00",
     "model": "mock-extractive-v1",
     "llm_provider": "mock",
-    "config_hash": "2f447041c030",
+    "config_hash": "3668a5b424e5",
     "total": 32,
     "passed": 32,
     "pass_rate": 100.0,
@@ -22,7 +22,7 @@
     "abstain_correctness": 100.0,
     "safety_inclusion_recall": 100.0,
     "draft_leak_count": 0,
-    "p95_latency_ms": 1.02,
+    "p95_latency_ms": 1.22,
     "note": "mock provider: pass rate validates pipeline wiring (routing, retrieval, guardrails, grounding), NOT live LLM answer quality - live LLM eval deferred"
   },
   "config_snapshot": {
@@ -89,7 +89,27 @@
       "Forklift",
       "Weld Shop",
       "Assembly Line A"
-    ]
+    ],
+    "agents": {
+      "mode": "multi_agent",
+      "prompt_version": "v2.0",
+      "timeout_s": 25,
+      "token_budget": 12000,
+      "min_clarify_confidence": 0.5,
+      "router": {
+        "model": "gpt-4o-mini",
+        "max_tokens": 350
+      },
+      "specialist": {
+        "model": "gpt-4o-mini",
+        "max_tokens": 700,
+        "max_steps": 3
+      },
+      "synthesizer": {
+        "model": "gpt-4o-mini",
+        "max_tokens": 900
+      }
+    }
   },
   "cases": [
     {
@@ -100,13 +120,15 @@
       "failures": [],
       "status": "ok",
       "categories": [
-        "maintenance"
+        "maintenance",
+        "safety"
       ],
       "primary": "maintenance",
       "cited": [
-        "MM-CNC-04-v1#s1"
+        "MM-CNC-04-v1#s1",
+        "SOP-CHEM-03-v1#s4"
       ],
-      "latency_ms": 0.73
+      "latency_ms": 0.68
     },
     {
       "id": "P02",
@@ -122,7 +144,7 @@
       "cited": [
         "MM-CNC-04-v1#s2"
       ],
-      "latency_ms": 0.66
+      "latency_ms": 0.59
     },
     {
       "id": "P03",
@@ -132,13 +154,15 @@
       "failures": [],
       "status": "ok",
       "categories": [
-        "maintenance"
+        "maintenance",
+        "safety"
       ],
       "primary": "maintenance",
       "cited": [
-        "MM-CONV-02-v1#s3"
+        "MM-CONV-02-v1#s3",
+        "SOP-LOTO-04-v1#s1"
       ],
-      "latency_ms": 0.61
+      "latency_ms": 0.78
     },
     {
       "id": "P04",
@@ -155,7 +179,7 @@
         "MM-PRESS-01-v1#s1",
         "MM-PRESS-01-v1#s2"
       ],
-      "latency_ms": 0.63
+      "latency_ms": 0.83
     },
     {
       "id": "P05",
@@ -171,7 +195,7 @@
       "cited": [
         "MM-COMP-03-v1#s1"
       ],
-      "latency_ms": 0.51
+      "latency_ms": 0.64
     },
     {
       "id": "P06",
@@ -190,7 +214,7 @@
         "MM-ROB-05-v1#s1",
         "SOP-PPE-01-v1#s4"
       ],
-      "latency_ms": 0.73
+      "latency_ms": 1.2
     },
     {
       "id": "P07",
@@ -206,7 +230,7 @@
       "cited": [
         "QC-TORQ-01-v1#s1"
       ],
-      "latency_ms": 0.84
+      "latency_ms": 0.6
     },
     {
       "id": "P08",
@@ -222,7 +246,7 @@
       "cited": [
         "QC-DIM-02-v1#s3"
       ],
-      "latency_ms": 0.88
+      "latency_ms": 0.78
     },
     {
       "id": "P09",
@@ -239,7 +263,7 @@
         "QC-NCR-03-v1#s2",
         "QC-NCR-03-v1#s1"
       ],
-      "latency_ms": 0.69
+      "latency_ms": 0.47
     },
     {
       "id": "P10",
@@ -255,7 +279,7 @@
       "cited": [
         "QC-SPC-04-v1#s2"
       ],
-      "latency_ms": 0.78
+      "latency_ms": 0.72
     },
     {
       "id": "P11",
@@ -271,7 +295,7 @@
       "cited": [
         "QC-PAINT-05-v1#s1"
       ],
-      "latency_ms": 0.54
+      "latency_ms": 0.53
     },
     {
       "id": "P12",
@@ -287,7 +311,7 @@
       "cited": [
         "QC-WELD-06-v1#s2"
       ],
-      "latency_ms": 0.77
+      "latency_ms": 0.8
     },
     {
       "id": "P13",
@@ -304,7 +328,7 @@
         "SOP-PPE-01-v1#s1",
         "SOP-PPE-01-v1#s3"
       ],
-      "latency_ms": 0.65
+      "latency_ms": 0.89
     },
     {
       "id": "P14",
@@ -320,7 +344,7 @@
       "cited": [
         "SOP-LOTO-04-v1#s3"
       ],
-      "latency_ms": 0.51
+      "latency_ms": 0.61
     },
     {
       "id": "P15",
@@ -336,7 +360,7 @@
       "cited": [
         "SOP-FLT-06-v1#s2"
       ],
-      "latency_ms": 0.65
+      "latency_ms": 0.46
     },
     {
       "id": "M01",
@@ -354,7 +378,7 @@
         "MM-CONV-02-v1#s2",
         "SOP-LOTO-04-v1#s1"
       ],
-      "latency_ms": 0.63
+      "latency_ms": 0.6
     },
     {
       "id": "M02",
@@ -372,7 +396,7 @@
         "MM-PRESS-01-v1#s3",
         "SOP-LOTO-04-v1#s1"
       ],
-      "latency_ms": 0.94
+      "latency_ms": 0.7
     },
     {
       "id": "M03",
@@ -391,7 +415,7 @@
         "MM-PRESS-01-v1#s1",
         "SOP-FLT-06-v1#s3"
       ],
-      "latency_ms": 1.16
+      "latency_ms": 1.01
     },
     {
       "id": "M04",
@@ -407,7 +431,7 @@
       "cited": [
         "SOP-MG-05-v1#s2"
       ],
-      "latency_ms": 0.86
+      "latency_ms": 0.9
     },
     {
       "id": "M05",
@@ -425,7 +449,7 @@
         "MM-ROB-05-v1#s2",
         "SOP-PPE-01-v1#s4"
       ],
-      "latency_ms": 0.83
+      "latency_ms": 0.67
     },
     {
       "id": "N01",
@@ -441,7 +465,7 @@
       ],
       "primary": "safety",
       "cited": [],
-      "latency_ms": 0.3
+      "latency_ms": 0.4
     },
     {
       "id": "N02",
@@ -457,7 +481,7 @@
       ],
       "primary": "quality",
       "cited": [],
-      "latency_ms": 0.34
+      "latency_ms": 0.33
     },
     {
       "id": "N03",
@@ -473,7 +497,7 @@
       ],
       "primary": "safety",
       "cited": [],
-      "latency_ms": 0.42
+      "latency_ms": 0.47
     },
     {
       "id": "N04",
@@ -489,7 +513,7 @@
       ],
       "primary": "safety",
       "cited": [],
-      "latency_ms": 0.35
+      "latency_ms": 0.34
     },
     {
       "id": "N05",
@@ -503,7 +527,7 @@
       ],
       "primary": "quality",
       "cited": [],
-      "latency_ms": 0.55
+      "latency_ms": 1.08
     },
     {
       "id": "E01",
@@ -515,7 +539,7 @@
       "categories": [],
       "primary": null,
       "cited": [],
-      "latency_ms": 0.1
+      "latency_ms": 0.16
     },
     {
       "id": "E02",
@@ -527,7 +551,7 @@
       "categories": [],
       "primary": null,
       "cited": [],
-      "latency_ms": 0.14
+      "latency_ms": 0.17
     },
     {
       "id": "E03",
@@ -543,7 +567,7 @@
       "cited": [
         "SOP-EMR-02-v1#s1"
       ],
-      "latency_ms": 0.9
+      "latency_ms": 1.27
     },
     {
       "id": "E04",
@@ -559,7 +583,7 @@
       "cited": [
         "SOP-EMR-02-v1#s2"
       ],
-      "latency_ms": 0.72
+      "latency_ms": 0.65
     },
     {
       "id": "E05",
@@ -575,7 +599,7 @@
       "cited": [
         "QC-TORQ-01-v1#s1"
       ],
-      "latency_ms": 0.4
+      "latency_ms": 0.39
     },
     {
       "id": "E06",
@@ -593,7 +617,7 @@
         "MM-CONV-02-v1#s2",
         "SOP-MG-05-v1#s2"
       ],
-      "latency_ms": 0.8
+      "latency_ms": 0.78
     },
     {
       "id": "E07",
@@ -605,7 +629,7 @@
       "categories": [],
       "primary": null,
       "cited": [],
-      "latency_ms": 0.08
+      "latency_ms": 0.13
     }
   ]
 }

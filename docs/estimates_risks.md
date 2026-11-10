@@ -47,7 +47,7 @@
 
 - All documents, queries and feedback are **synthetic** (`is_synthetic=1`).
 - The role selector is not authentication.
-- **Live-LLM quality was measured on 45 synthetic cases (43/45).** It is not a guarantee for real documents; the checks are citation and keyword based, not an AI judge. The 32/32 rule-based result checks wiring only.
+- **Live-LLM quality was measured on 45 synthetic cases (44/45).** It is not a guarantee for real documents; the checks are citation and keyword based, not an AI judge. The 32/32 rule-based result checks wiring only.
 - Small-model answers can vary run to run, and their safety content must be checked.
 - BM25 plus query rewriting suits ~100 sections; larger corpora need hybrid search.
 - SQLite runs single-node and locally.

@@ -8,7 +8,7 @@
 {"id": "P08", "type": "positive", "question": "What is the bore diameter tolerance on CNC-04 parts?", "expect_status": "ok", "expect_primary": "quality", "expect_cited_doc": "QC-DIM-02"}
 {"id": "P09", "type": "positive", "question": "What do I do with nonconforming parts? Do they need a hold tag?", "expect_status": "ok", "expect_primary": "quality", "expect_cited_doc": "QC-NCR-03"}
 {"id": "P10", "type": "positive", "question": "The SPC control chart has 7 points in a row above the center line", "expect_status": "ok", "expect_primary": "quality", "expect_cited_doc": "QC-SPC-04"}
-{"id": "P11", "type": "positive", "question": "What dry film thickness is acceptable for paint?", "expect_status": "ok", "expect_primary": "quality", "expect_cited_doc": "QC-PAINT-05", "expect_answer_contains": "60-80"}
+{"id": "P11", "type": "positive", "question": "What dry film thickness is acceptable for paint?", "expect_status": "ok", "expect_primary": "quality", "expect_cited_doc": "QC-PAINT-05", "expect_answer_contains": "80 micron"}
 {"id": "P12", "type": "positive", "question": "What is the maximum weld porosity allowed?", "expect_status": "ok", "expect_primary": "quality", "expect_cited_doc": "QC-WELD-06"}
 {"id": "P13", "type": "positive", "question": "What PPE is required in Paint Booth 1?", "expect_status": "ok", "expect_primary": "safety", "expect_cited_doc": "SOP-PPE-01"}
 {"id": "P14", "type": "positive", "question": "What are the lockout tagout steps?", "expect_status": "ok", "expect_primary": "safety", "expect_cited_doc": "SOP-LOTO-04"}

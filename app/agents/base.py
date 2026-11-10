@@ -14,7 +14,18 @@ from app.services.guardrails import mask_pii
 
 
 class AgentError(Exception):
-    """Raised when an agent cannot produce a valid result within its limits (orchestrator falls back)."""
+    """Raised when an agent cannot produce a valid result within its limits (orchestrator falls back).
+
+    `steps` carries the partial trace so a failed run is still visible in the trace view.
+    """
+
+    def __init__(self, msg: str, steps: list | None = None):
+        super().__init__(msg)
+        self.steps = steps or []
+
+
+def _clip(x: object, n: int = 4000) -> str:
+    return mask_pii(x if isinstance(x, str) else json.dumps(x, default=str))[:n]
 
 
 @dataclass
@@ -63,11 +74,14 @@ def run_agent(name: str, system: str, user: str, *, model: str, max_tokens: int,
         except Exception as e:
             steps.append(AgentStep(agent=name, kind="llm", model=model, status="error",
                                    summary=f"LLM call failed: {type(e).__name__}"))
-            raise AgentError(f"{name}: LLM call failed ({type(e).__name__})") from e
+            steps[-1].input = _clip(messages[-1].get("content") or "")
+            raise AgentError(f"{name}: LLM call failed ({type(e).__name__})", steps) from e
         steps.append(AgentStep(agent=name, kind="llm", model=res.model or model, tokens_in=res.tokens_in,
                                tokens_out=res.tokens_out, latency_ms=res.latency_ms,
                                summary="requested tools: " + ", ".join(tc.name for tc in res.tool_calls)
-                               if res.tool_calls else "returned an answer"))
+                               if res.tool_calls else "returned an answer",
+                               input=_clip(messages[-1].get("content") or ""),
+                               output=_clip(res.text or [{"tool": tc.name, "args": tc.arguments} for tc in res.tool_calls])))
         if res.tool_calls:
             messages.append({"role": "assistant", "content": res.text or None, "tool_calls": [
                 {"id": tc.id, "type": "function",
@@ -80,7 +94,8 @@ def run_agent(name: str, system: str, user: str, *, model: str, max_tokens: int,
                 except Exception as e:  # bad arguments etc: report to the model, don't crash
                     out, status = f"Tool error: {type(e).__name__}", "error"
                 steps.append(AgentStep(agent=name, kind="tool", name=tc.name, status=status,
-                                       summary=mask_pii(json.dumps(tc.arguments))[:120]))
+                                       summary=mask_pii(json.dumps(tc.arguments))[:120],
+                                       input=_clip(tc.arguments), output=_clip(out)))
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": out})
             continue
         try:
@@ -90,4 +105,4 @@ def run_agent(name: str, system: str, user: str, *, model: str, max_tokens: int,
             messages.append({"role": "assistant", "content": res.text})
             messages.append({"role": "user", "content": "Your reply was not valid JSON for the required format. "
                                                          "Return ONLY the JSON object."})
-    raise AgentError(f"{name}: no valid answer within {max_steps} steps")
+    raise AgentError(f"{name}: no valid answer within {max_steps} steps", steps)

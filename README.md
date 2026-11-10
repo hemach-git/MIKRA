@@ -10,14 +10,15 @@ Floor supervisors ask a plain-English question. A small team of **AI agents** ro
 
 | Part | Status |
 |---|---|
-| Rule-based pipeline, guardrails, document approvals, audit, analytics, feedback queue | **Built and tested** (54 automated tests; 32 rule-based evals on a mock model) |
+| Rule-based pipeline, guardrails, document approvals, audit, analytics, feedback queue | **Built and tested** (107 automated tests; 32 rule-based evals on a mock model) |
 | **LLM agents:** router, Safety / Maintenance / Quality specialists, synthesizer (OpenAI `gpt-4o-mini`) | **Built**, tested offline with a scripted fake LLM and formally evaluated live on 45 golden cases: **44/45 passed (97.8%)** (see Evaluation results) |
-| Streamlit UI | **Built** (`app/main.py` plus Ask, Documents, Review queue, Analytics and Diagnostics pages). Not covered by the automated tests |
+| Streamlit UI | **Built**: Ask, Documents, Review queue, Analytics, Diagnostics, plus the administrator pages *Traces & logs* and *Users & access*. Every page is smoke-tested for every role |
+| Administrator tools | **Built**: stored traces for every agent step, trace view with drill-down metrics, document approve / advise / reject with diff and history, user access management with sign-in |
 | Critic agent, manager insights agent, embedding search, LLM judge | Not built in this prototype. A second AI check on answers is a next step |
 
 **Two kinds of numbers, never mixed:** the 32/32 rule-based result checks the plumbing on a mock model (no AI). The live result (44/45) is the real `gpt-4o-mini` agents on synthetic data.
 
-**Next:** real documents from one plant line, sign-in, faster answers, a second AI check on answers.
+**Next:** real documents from one plant line, company SSO, faster answers, a second AI check on answers.
 
 ## Quick start
 
@@ -26,6 +27,8 @@ pip install -r requirements.txt
 cp .env.example .env              # then edit it yourself
 streamlit run app/main.py         # http://localhost:8501  (DB auto-seeds on first run)
 ```
+
+**Sign in.** The first run creates three demo accounts (`admin`, `plant.manager`, `sup.chen`) with random passwords written to `data/initial_credentials.txt` (git-ignored; the path is also printed in the terminal and shown on the sign-in page). Set `MIKRA_ADMIN_PASSWORD` in `.env` to choose the administrator password. New users use *Request access* and an administrator approves them. `MIKRA_AUTH=off` turns sign-in off for local development only.
 
 `.env` (never commit it):
 
@@ -76,6 +79,14 @@ More detail:
 | "Not found" instead of guessing | Analytics: KPIs, daily trend, **top recurring issues**, documentation gaps, CSV export |
 | Thumbs up / flag a wrong answer | Diagnostics: health, config hash, recent requests, agent trace, eval summary |
 
+### Administrator
+
+| Page | What an administrator can do |
+|---|---|
+| **Traces & logs** | Filter every question; open a trace to see the waterfall timeline and each step's input, output, tokens, latency and cost; see the citations, feedback, audit rows and log lines. Tabs for *Metrics & drill-down* (8 metrics, 8 groupings, click a row to list the questions behind it), *Agents & cost* and *Logs* |
+| **Documents** | Approve, **advise changes** (send back with a comment; the author edits and resubmits), or reject. Diff against the published version and the review history |
+| **Users & access** | Approve or deny access requests (choosing the role), change roles, disable accounts, reset passwords, see the access activity. The last administrator cannot be removed |
+
 ## Evaluation results
 
 **v1 rule-based pipeline (mock LLM, synthetic data, 32 golden cases): 32/32 pass.**
@@ -89,7 +100,7 @@ More detail:
 | Draft-document leaks | 0 | 0 |
 | p95 latency (pipeline, mock) | ~1 ms | < 8 s agent mode |
 
-Case types: 15 positive, 5 multi-route (maintenance + safety), 5 negative, 7 edge (injection, emergency, draft leak, PII, bad input). Tests: **54/54 pass** (`tests/results/pytest_latest.txt`).
+Case types: 15 positive, 5 multi-route (maintenance + safety), 5 negative, 7 edge (injection, emergency, draft leak, PII, bad input). Tests: **107/107 pass** (`tests/results/pytest_latest.txt`).
 
 > ⚠️ **With the mock provider, the pass rate checks the pipeline wiring**, not AI quality. The mock is extractive and was written alongside the golden set.
 
@@ -103,7 +114,7 @@ Case types: 15 positive, 5 multi-route (maintenance + safety), 5 negative, 7 edg
 | Safety-inclusion recall (hazard tasks) | 100% | 100% |
 | Paraphrased questions | 90% (9 of 10) | ≥ 80% |
 | Draft-document leaks | 0 | 0 |
-| Latency p50 / p95 | 5.8 s / 8.7 s | p95 < 8 s: **not met** |
+| Latency p50 / p95 | 5.8 s / 10.9 s (an earlier run of the same set: 5.8 s / 8.7 s) | p95 < 8 s: **not met** |
 | LLM calls and tokens per question | ~3.0 calls, ~2,000 tokens | |
 | Estimated cost | ~$0.02 for the whole run (~$0.0005 per question; estimate from the price table in `evals/run.py`) | |
 | Fell back to rule-based mode | 0 cases | |
@@ -126,13 +137,15 @@ The checks are routing, citation and keyword rules, not an AI judge, and the set
 | Audit trail | `audit_log` table: who, role, action, target, decision, model, request_id, details |
 | Human-in-the-loop | Document publishing **requires** manager approval; flagged answers need a manager decision; **agents have read-only tools and cannot write or publish** |
 | Logs | JSON lines in `logs/app.jsonl`, PII-masked |
+| Stored traces | `agent_steps` table: every agent step with PII-masked input and output (clipped to 4,000 characters), tokens, latency and cost. Administrators only. A retention period is a pilot decision (risk R16) |
+| Access | `users` table: salted PBKDF2 password hashes, administrator approval, lockout after 5 failed sign-ins, every decision in `audit_log` |
 | Data leaving the machine | In agent mode the PII-masked question and retrieved sections go to the LLM API. Fine for synthetic data; real documents need a review first |
 
 ## Assumptions and limitations
 
-- The role selector is **not** authentication (a later version adds SSO).
+- Sign-in is a **local prototype** (salted password hashes, lockout, administrator approval). It is not company SSO and has no multi-factor step or email password reset.
 - Live quality was measured on 45 **synthetic** cases (44/45); it is not a guarantee for real documents. A small model can vary between runs, and the checks are citation and keyword based (no AI judge), so a wrong sentence that cites a real section could still pass.
-- Live latency misses the 8 s goal: p50 5.8 s, p95 8.7 s.
+- Live latency misses the 8 s goal: p50 5.8 s, p95 between 8.7 s and 10.9 s across two runs of the same set (the live API varies).
 - Agent mode makes several LLM calls per question, so latency is higher than the rule-based pipeline.
 - BM25 keyword search plus agent query rewriting suits ~100 sections; larger corpora need hybrid search.
 - SQLite, single node, local only. Markdown documents only (no PDF/OCR yet).

@@ -56,3 +56,9 @@ agents:
   router:      { model: gpt-4o-mini, max_tokens: 350 }
   specialist:  { model: gpt-4o-mini, max_tokens: 700, max_steps: 3 }
   synthesizer: { model: gpt-4o-mini, max_tokens: 900 }
+
+auth:
+  enabled: true              # false (or MIKRA_AUTH=off) shows the old role selector, for local development only
+  min_password_length: 10
+  max_failed_attempts: 5
+  lockout_minutes: 15

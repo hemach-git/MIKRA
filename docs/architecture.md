@@ -110,7 +110,8 @@ sequenceDiagram
 ```
 mfg-doc-router/
 ├── app/
-│   ├── main.py, pages/, ui/          Streamlit frontend [built]
+│   ├── main.py, pages/, ui/          Streamlit frontend [built]: Ask, Documents (approve / advise / reject),
+│   │                                 Review queue, Analytics, Diagnostics, Traces & logs (admin), Users & access (admin)
 │   ├── agents/                       [built]
 │   │   ├── base.py                   agent runner: tool loop, caps, trace
 │   │   ├── prompts.py                prompts and PROMPT_VERSION
@@ -123,6 +124,9 @@ mfg-doc-router/
 │   │   ├── llm.py                    mock / openai / anthropic adapter
 │   │   ├── router.py, retriever.py, guardrails.py   (rule-based fallback, retrieval, guards)
 │   │   ├── docs_admin.py, audit.py, analytics.py
+│   ├── observability.py          trace list/detail, timeline, metrics + drill-down, log search
+│   ├── users.py                  access requests, approval, sign-in, lockout
+│   ├── pricing.py                token price table (cost estimates)
 │   ├── models/schemas.py             [built] Pydantic contract incl. AgentStep
 │   ├── data/db.py, seed_synthetic.py, corpus/*.md (18 synthetic docs + 1 draft)
 │   └── observability/logging.py
@@ -146,3 +150,11 @@ agents:
   specialist:   { model: gpt-4o-mini, max_tokens: 700, max_steps: 3 }
   synthesizer:  { model: gpt-4o-mini, max_tokens: 900 }
 ```
+
+## 6. Observability and access control
+
+- **Trace write path.** `workflow.ask()` collects the `AgentStep` list (including the pre-fetched search and, on failure, the partial steps plus a `fallback_to_pipeline` guard). `_finish()` writes the query row, its citations, every step (`agent_steps`, with masked input/output and cost) and the audit row in **one transaction**.
+- **Trace read path.** `services/observability.py` builds the trace list, trace detail, waterfall, aggregates and drill-down from those tables. The *Traces & logs* page is a thin view over it. Only administrators can open it.
+- **Access.** `ui/common.init()` is the gate on every page: no signed-in account means the sign-in / request-access form and nothing else. The account is re-read from the database on each page run, so disabling a user or changing a role takes effect on their next click. Admin-only pages check the role again (`require_admin`).
+- **Account lifecycle.** request (pending) → administrator approves with a role or denies → sign-in. Lockout after repeated failures. All steps are written to `audit_log`.
+

@@ -28,7 +28,7 @@ def run(question: str) -> None:
         return
     with st.spinner("Finding the right documents..."):
         try:
-            resp = workflow.ask(question, common.role(), common.user())
+            resp = workflow.ask(question, common.query_role(), common.user())
         except Exception as exc:  # backend should not raise, but never show a stack trace to the floor
             st.error(f"Something went wrong while answering. Please try again. ({type(exc).__name__})")
             return

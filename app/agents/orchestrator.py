@@ -47,9 +47,18 @@ def _check_budget(trace: list[AgentStep], budget: int) -> None:
 
 
 def answer(question: str, emergency: bool = False) -> OrchestratorResult:
+    """Run the agents. On any failure the exception carries `.trace` (the partial trace) for the caller."""
+    trace: list[AgentStep] = []
+    try:
+        return _answer(question, emergency, trace)
+    except Exception as e:
+        e.trace = trace + [s for s in getattr(e, "steps", []) if s not in trace]   # type: ignore[attr-defined]
+        raise
+
+
+def _answer(question: str, emergency: bool, trace: list[AgentStep]) -> OrchestratorResult:
     cfg = get_config()
     acfg = cfg["agents"]
-    trace: list[AgentStep] = []
 
     # 1. Router agent
     plan, steps = router_agent.plan(question)
@@ -97,15 +106,26 @@ def answer(question: str, emergency: bool = False) -> OrchestratorResult:
         return specialists.research(cat, question, q)
 
     found: list[specialists.Findings] = []
+    first_error: Exception | None = None
     with ThreadPoolExecutor(max_workers=len(cats)) as pool:
         futures = {c: pool.submit(run, c) for c in cats}
         for c, fut in futures.items():
             try:
                 f, st = fut.result(timeout=acfg["timeout_s"])
             except FutureTimeout as e:
-                raise AgentError(f"{c} specialist timed out") from e
+                trace.append(AgentStep(agent=c, kind="llm", status="timeout", summary="specialist timed out"))
+                if first_error is None:
+                    first_error = AgentError(f"{c} specialist timed out")
+                    first_error.__cause__ = e
+                continue
+            except AgentError as e:           # keep the partial trace of the failed specialist, then fail over
+                trace += e.steps
+                first_error = first_error or e
+                continue
             trace += st
             found.append(f)
+    if first_error is not None:
+        raise first_error
     _check_budget(trace, acfg["token_budget"])
 
     # 3b. Safety evidence guarantee (CODE): a hazard task must carry a cited safety section even if the safety

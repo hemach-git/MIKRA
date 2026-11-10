@@ -66,6 +66,8 @@ class AgentStep(BaseModel):
     latency_ms: float = 0.0
     status: Literal["ok", "error", "timeout", "skipped"] = "ok"
     summary: str = ""                       # short, PII-masked, plain English
+    input: str = ""                         # what the step received (PII-masked, clipped to 4000 chars)
+    output: str = ""                        # what it returned (PII-masked, clipped to 4000 chars)
 
 
 class AskResponse(BaseModel):

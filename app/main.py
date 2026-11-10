@@ -18,5 +18,10 @@ if common.is_manager():
         st.Page("pages/analytics.py", title="Analytics", icon=":material/monitoring:"),
         st.Page("pages/diagnostics.py", title="Diagnostics", icon=":material/health_and_safety:"),
     ]
+if common.is_admin():
+    pages += [
+        st.Page("pages/traces.py", title="Traces & logs", icon=":material/account_tree:"),
+        st.Page("pages/users.py", title="Users & access", icon=":material/manage_accounts:"),
+    ]
 
 st.navigation(pages).run()

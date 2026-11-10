@@ -161,14 +161,15 @@ def main() -> None:
         ("Floor supervisors", 12.5, NAVY, True),
         ("Fast answers they can check, during the shift.", 12, GREY, False),
         ("Plant managers", 12.5, NAVY, True),
-        ("Approve or reject document changes.", 12, GREY, False),
-        ("Review answers flagged as wrong.", 12, GREY, False),
-        ("See repeat floor problems and missing documents; export to a spreadsheet (CSV).", 12, GREY, False)], after=2)
+        ("Approve, reject or advise on document changes.", 12, GREY, False),
+        ("Review flagged answers; see repeat floor problems (CSV export).", 12, GREY, False),
+        ("Administrators", 12.5, NAVY, True),
+        ("Approve who gets access. Follow any answer step by step, with its cost.", 12, GREY, False)], after=2)
 
     # What is next
     box(s, 0.45, 6.55, 12.44, 0.5, fill=NAVY)
     text(s, 0.62, 6.6, 12.1, 0.42, [[("What is next:  ", 14, ORANGE, True),
-                                     ("real documents from one plant line  ·  sign-in  ·  faster answers  ·  "
+                                     ("real documents from one plant line  ·  company single sign-on  ·  faster answers  ·  "
                                       "a second AI check on answers", 14, WHITE, False)]])
     # Fine print
     text(s, 0.45, 7.08, 12.44, 0.36, [(

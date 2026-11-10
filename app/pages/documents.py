@@ -79,15 +79,29 @@ def new_doc_form() -> None:
             st.error(f"Could not submit: {exc}")
 
 
+STATE_LABELS = {"awaiting_review": ("Awaiting review", "#F9A825"), "changes_requested": ("Changes requested", "#EF6C00")}
+
+
+def history(doc_id: str) -> None:
+    rows = docs_admin.list_reviews(doc_id)
+    if not rows:
+        st.caption("No review activity yet.")
+    icons = {"submit": "📝", "advise": "💬", "resubmit": "🔁", "approve": "✅", "reject": "⛔", "comment": "🗨️"}
+    for r in rows:
+        st.markdown(f"{icons.get(r['action'], '•')} **{esc(r['actor'])}** · {r['action']} · "
+                    f"<span class='small-muted'>{str(r['ts'])[:16]}</span>"
+                    + (f"  \n> {esc(r['comment'])}" if r["comment"] else ""), unsafe_allow_html=True)
+
+
 def pending() -> None:
-    drafts = docs_admin.list_documents(role="manager", status="draft")
+    drafts = docs_admin.list_documents(role=common.role(), status="draft")
     if not drafts:
         st.info("No drafts waiting for approval.")
         return
-    published = docs_admin.list_documents(role="manager", status="published")
     for dr in drafts:
+        label, color = STATE_LABELS.get(dr.get("review_state"), STATE_LABELS["awaiting_review"])
         with st.container(border=True):
-            st.markdown(f"**{dr['doc_key']} v{dr['version']}** - {esc(dr['title'])}")
+            st.markdown(f"**{dr['doc_key']} v{dr['version']}** - {esc(dr['title'])} " + pill(label, color), unsafe_allow_html=True)
             st.caption(f"Submitted by {dr.get('created_by') or '-'} on {str(dr.get('created_at'))[:16]}")
             try:
                 flags = json.loads(dr.get("guardrail_flags") or "[]")
@@ -95,35 +109,58 @@ def pending() -> None:
                 flags = []
             if flags:
                 st.warning("Automatic checks flagged: " + ", ".join(map(str, flags)))
-            new = docs_admin.get_document(dr["doc_id"], "manager") or {}
-            cur_meta = next((p for p in published if p["doc_key"] == dr["doc_key"]), None)
-            cur = docs_admin.get_document(cur_meta["doc_id"], "manager") if cur_meta else None
-            old_txt = (cur or {}).get("content", "")
-            new_txt = new.get("content", "")
-            left, right = st.columns(2)
-            cur_label = f" (v{cur_meta['version']})" if cur_meta else " - none (new document)"
-            left.markdown(f"**Current published**{cur_label}")
-            left.code(old_txt or "(no published version)", language="markdown", wrap_lines=True)
-            right.markdown(f"**Proposed draft (v{dr['version']})**")
-            right.code(new_txt, language="markdown", wrap_lines=True)
-            if old_txt:
-                diff = "\n".join(difflib.unified_diff(old_txt.splitlines(), new_txt.splitlines(),
-                                                      "published", "draft", lineterm="", n=1))
-                with st.expander("Changes only (diff)", expanded=True):
-                    st.code(diff or "No text differences.", language="diff")
-            note = st.text_input("Review note", key=f"note_{dr['doc_id']}")
-            a, r, _ = st.columns([1, 1, 3])
-            for label, decision, kind, col in (("Approve & publish", "approved", "primary", a),
-                                               ("Reject", "rejected", "secondary", r)):
-                if col.button(label, key=f"{decision}_{dr['doc_id']}", type=kind, width="stretch"):
-                    try:
-                        res = docs_admin.review_document(dr["doc_id"], {"decision": decision,
-                                                                        "reviewer": common.user(), "note": note})
-                        st.toast(f"{dr['doc_key']} v{dr['version']}: {res['status']}", icon="✅")
-                        st.session_state["flash"] = f"{dr['doc_key']} v{dr['version']} {res['status']}."
-                        st.rerun()
-                    except ValueError as exc:
-                        st.error(str(exc))
+            d = docs_admin.diff_against_published(dr["doc_id"])
+            cur_label = f" (v{d['published_version']})" if d["published_version"] else " - none (new document)"
+            st.markdown(f"**Changes:** +{d['added']} lines, -{d['removed']} lines against the published version{cur_label}")
+            tab_d, tab_s, tab_h = st.tabs(["Changes only (diff)", "Side by side", "Review history"])
+            with tab_d:
+                st.code(d["diff"] or "No text differences.", language="diff")
+            with tab_s:
+                left, right = st.columns(2)
+                left.markdown(f"**Current published**{cur_label}")
+                left.code(d["old"] or "(no published version)", language="markdown", wrap_lines=True)
+                right.markdown(f"**Proposed draft (v{dr['version']})**")
+                right.code(d["new"], language="markdown", wrap_lines=True)
+            with tab_h:
+                history(dr["doc_id"])
+            note = st.text_area("Your comment (required for 'Advise', shown to the author)", key=f"note_{dr['doc_id']}", height=70)
+            a, v, r, _ = st.columns([1.2, 1.2, 1, 2])
+            who, role = common.user(), common.role()
+            if a.button("Approve & publish", key=f"approved_{dr['doc_id']}", type="primary", width="stretch"):
+                try:
+                    res = docs_admin.review_document(dr["doc_id"], {"decision": "approved", "reviewer": who, "note": note})
+                    st.session_state["flash"] = f"{dr['doc_key']} v{dr['version']} {res['status']}."
+                    st.rerun()
+                except ValueError as exc:
+                    st.error(str(exc))
+            if v.button("Advise changes", key=f"advise_{dr['doc_id']}", width="stretch",
+                        help="Send the draft back with your advice. Supervisors keep seeing the current published version."):
+                try:
+                    docs_admin.advise_document(dr["doc_id"], who, note, role)
+                    st.session_state["flash"] = f"Advice sent on {dr['doc_key']} v{dr['version']}. It stays a draft until updated."
+                    st.rerun()
+                except (ValueError, PermissionError) as exc:
+                    st.error(str(exc))
+            if r.button("Reject", key=f"rejected_{dr['doc_id']}", width="stretch"):
+                try:
+                    res = docs_admin.review_document(dr["doc_id"], {"decision": "rejected", "reviewer": who, "note": note})
+                    st.session_state["flash"] = f"{dr['doc_key']} v{dr['version']} {res['status']}."
+                    st.rerun()
+                except ValueError as exc:
+                    st.error(str(exc))
+            if dr.get("review_state") == "changes_requested":
+                with st.expander("Edit the draft and resubmit", icon=":material/edit:"):
+                    with st.form(f"resub_{dr['doc_id']}"):
+                        new_title = st.text_input("Title", value=dr["title"])
+                        new_content = st.text_area("Content (Markdown)", value=d["new"], height=240)
+                        why = st.text_input("What did you change?")
+                        if st.form_submit_button("Resubmit for review", type="primary"):
+                            try:
+                                docs_admin.resubmit_draft(dr["doc_id"], who, new_content, new_title, why, role)
+                                st.session_state["flash"] = f"{dr['doc_key']} v{dr['version']} resubmitted for review."
+                                st.rerun()
+                            except (ValueError, PermissionError) as exc:
+                                st.error(str(exc))
 
 
 common.page_header("Documents", "Approved procedures, manuals and quality standards." if not mgr

@@ -40,6 +40,8 @@ def get_config() -> dict:
     if os.getenv("OPENAI_MODEL"):                    # one env var switches every agent's model
         for role in ("router", "specialist", "synthesizer"):
             cfg["agents"][role]["model"] = os.environ["OPENAI_MODEL"].strip()
+    if os.getenv("MIKRA_AUTH", "").strip().lower() in ("off", "false", "0"):   # local development only
+        cfg["auth"]["enabled"] = False
     return cfg
 
 

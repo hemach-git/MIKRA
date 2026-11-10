@@ -1,8 +1,8 @@
 # MIKRA: Design v2 (AI-powered, supervised multi-agent)
 
 > **Status (2026-11-09).**
-> - **v1 (built, tested):** rule-based pipeline with a mock LLM. 54 automated tests; 32/32 rule-based evals pass, which checks the wiring only.
-> - **v2 (built):** LLM agents for routing, research and answer writing, plus the Streamlit UI. **Formal live eval: 44/45 passed** on 45 synthetic cases (routing 96.3%, correct document cited 97.1%, abstain 100%, safety included 100%); p95 latency 8.7 s misses the 8 s goal.
+> - **v1 (built, tested):** rule-based pipeline with a mock LLM. 107 automated tests; 32/32 rule-based evals pass, which checks the wiring only.
+> - **v2 (built):** LLM agents for routing, research and answer writing, plus the Streamlit UI. **Formal live eval: 44/45 passed** on 45 synthetic cases (routing 96.3%, correct document cited 97.1%, abstain 100%, safety included 100%); p95 latency 8.7-10.9 s misses the 8 s goal.
 > - **Provider:** OpenAI `gpt-4o-mini` is the first target. The interface is provider-agnostic, so Claude plugs in the same way.
 
 Diagrams: [architecture.md](architecture.md) and [data_model.md](data_model.md). Agent interfaces: [agents_contract.md](agents_contract.md).
@@ -19,7 +19,7 @@ Diagrams: [architecture.md](architecture.md) and [data_model.md](data_model.md).
 - **R7.** Supervisors flag wrong answers; managers review them.
 - **R8.** Ambiguous question: ask one clarifying question, or search broadly and say so.
 - **R9 (stretch).** Manager insights: cluster unanswered questions into documentation gaps, summarize recurring issues, draft a document update (human approves).
-- **Non-functional:** p95 under 8 s in agent mode (**measured p95 8.7 s, p50 5.8 s: not met**, by 0.7 s), under 1 s in the rule-based fallback, runs locally, no secrets in the repo, every request traceable.
+- **Non-functional:** p95 under 8 s in agent mode (**measured p95 8.7 s in one run and 10.9 s in the next, p50 5.8 s: not met**), under 1 s in the rule-based fallback, runs locally, no secrets in the repo, every request traceable.
 
 **Never list**
 - NEVER give a safety answer without citing the safety procedure; never suggest skipping a safety step.
@@ -109,7 +109,7 @@ Also tracked per question: tokens, LLM calls, and estimated cost.
 
 **Mode comparison:** run the same golden set in `pipeline` and `multi_agent` mode and report both.
 
-**Observability:** each request carries an `agent_trace` (agent, step, model, tokens, latency, status) in the response, the logs and the Diagnostics page.
+**Observability:** each request carries an `agent_trace` (agent, step, model, tokens, latency, status, input, output). Every step is stored in the `agent_steps` table, including the first pre-fetched search and the partial steps of a run that failed over to the rule-based pipeline. Administrators read it in the **Traces & logs** page (see section 8).
 
 ## 6. Tradeoffs ledger
 
@@ -134,3 +134,20 @@ Also tracked per question: tokens, LLM calls, and estimated cost.
 **Stretch (not built):** critic, insights agent, embeddings, LLM judge.
 **Next:** real documents from one plant line, sign-in, faster answers, a second AI check on answers (the critic).
 The rule-based pipeline stays behind `agents.mode: pipeline` as the safety net.
+
+## 8. Administrator capabilities (added after the first release)
+
+| Need | What was built | Business why |
+|---|---|---|
+| **Trace and log view** | A *Traces & logs* page modelled on LLM-observability tools: a filterable list of every question; a trace detail with a waterfall timeline, one expandable row per step showing its input and output, tokens, latency and cost; citations, feedback, audit rows and raw log lines for the same request. Agent and cost tables plus a log search. | When an answer is wrong or slow, an administrator can see which agent did what and fix the cause instead of guessing. |
+| **Aggregated metrics with drill-down** | Eight metrics (volume, error rate, fallback rate, p50 and p95 latency, tokens, cost, helpful %) grouped by day, category, status, engine, model, equipment, user or role. Click any row to list the questions behind it, then open one trace. | Turns a number on a dashboard into the concrete questions to look at. |
+| **Document updates: approve, deny or advise** | Besides *Approve* and *Reject*, a reviewer can *Advise changes*: the draft stays hidden from supervisors, the author sees the comment, edits and resubmits. Each draft has a review history and a diff against the published version. | Fewer rejected-and-lost drafts, and a recorded reason for every change to a safety document. |
+| **Users and access** | Sign-in with an access-request flow. An administrator approves (choosing the role), denies, changes roles, disables accounts and resets passwords. Failed sign-ins lock the account for 15 minutes after 5 tries. The last administrator cannot be removed. Every decision is in the audit trail. | Roles are enforced instead of chosen from a menu, and access decisions can be shown to an auditor. |
+
+**Design choices**
+- **Trace storage:** prompts and tool results are stored PII-masked and clipped to 4,000 characters, so a trace is readable without becoming a second copy of the documents. A retention period is a pilot decision (see risks R16).
+- **Timeline:** only step durations are stored, so the waterfall start times are reconstructed (router, then specialists in parallel, then synthesizer). The page says so.
+- **Local sign-in:** salted PBKDF2-SHA256 hashes, no extra dependency, no passwords in the repository. First-run demo passwords are random and written next to the database (git-ignored). It is not SSO and has no password-reset by email; the pilot should use the company identity provider.
+- **Advise state:** modelled as a review history rather than a new document status, so the published-only rule and the existing status constraint are untouched.
+- **Roles:** `supervisor`, `manager` (documents, review queue, analytics, diagnostics) and `admin` (everything, plus traces and users). Administrators act as managers when they ask questions.
+

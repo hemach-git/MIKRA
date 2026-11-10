@@ -67,4 +67,4 @@ def answer(question: str, emergency: bool = False) -> OrchestratorResult   # dec
 ## Response additions (`AskResponse`, already in `schemas.py`)
 
 - `mode`: `"pipeline"` or `"multi_agent"`.
-- `agent_trace`: list of `AgentStep` (seq, agent, kind, name, model, tokens_in, tokens_out, latency_ms, status, summary).
+- `agent_trace`: list of `AgentStep` (seq, agent, kind, name, model, tokens_in, tokens_out, latency_ms, status, summary, input, output). `input` and `output` are PII-masked and clipped to 4,000 characters. Every step is also stored in the `agent_steps` table. When a run fails over to the rule-based pipeline, `agent_trace` keeps the partial steps and ends with a `fallback_to_pipeline` guard step. `AgentError.steps` and `exception.trace` carry the partial trace inside the backend.

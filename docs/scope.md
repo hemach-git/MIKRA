@@ -4,7 +4,7 @@
 **Client problem:** A plant operator wants floor supervisors to get answers from the right documentation (safety procedures, maintenance manuals or quality control standards), routed automatically and answered accurately.
 **Engagement:** 2.5-hour prototype, local deployment only, **synthetic data**.
 
-> **Status (2026-11-09).** The rule-based version (v1) and the Streamlit UI are built; v1 is tested (54 automated tests; 32/32 rule-based evals on a mock model, which checks wiring only). The AI agent layer (v2) is built and **formally evaluated live: 44/45 on the 45-case golden set** (synthetic data).
+> **Status (2026-11-09).** The rule-based version (v1) and the Streamlit UI are built; v1 is tested (107 automated tests; 32/32 rule-based evals on a mock model, which checks wiring only). The AI agent layer (v2) is built and **formally evaluated live: 44/45 on the 45-case golden set** (synthetic data).
 
 ## 1. Business problem
 
@@ -41,17 +41,18 @@ Floor supervisors resolve issues during live production: jams, alarms, out-of-sp
 4. Document lifecycle: draft → manager approval → published (previous version retired). Supervisors see published documents only.
 5. Feedback, a manager review queue, an audit trail and a per-run config snapshot.
 6. Analytics: KPIs, trend, recurring issues, documentation gaps, drill-down and CSV export. Diagnostics page.
-7. 54 pytest tests and a 45-case golden eval set (32 of them also run in rule-based mode) with a repeatable runner.
+7. 107 pytest tests (services, agents with a scripted fake LLM, and every UI page for every role) and a 45-case golden eval set (32 of them also run in rule-based mode) with a repeatable runner.
 
 **Built (v2)**
 8. Router agent, three specialist agents with a read-only search tool, and a synthesizer agent, on a provider-agnostic LLM interface (OpenAI `gpt-4o-mini` first).
 9. Supervised orchestration: stage order, parallel specialists, step and token caps, timeout, and automatic fallback to the v1 pipeline.
 10. Agent trace (per step: agent, model, tokens, latency, status) in the response, the logs and the Diagnostics page.
-11. Mode comparison in the eval runner (`python -m evals.run --compare`). Paraphrase eval cases and the formal live run are owned by the tests-and-evals session; results not yet reported here.
+11. Administrator tools: trace storage for every agent step, a Traces & logs page with drill-down analytics, a document *advise* flow with diff and review history, and user access management with sign-in (see design.md section 8).
+12. Mode comparison in the eval runner (`python -m evals.run --compare`). Paraphrase eval cases and the formal live run are owned by the tests-and-evals session; results not yet reported here.
 
 ## 5. Out of scope (this prototype)
 
-- Real authentication or SSO (a role selector is used instead).
+- Company SSO and password reset by email (a local sign-in with administrator approval is built instead).
 - PDF/scanned document ingestion. Multiple languages and voice.
 - CMMS or work-order integration. Cloud deployment.
 - Long-term agent memory, and any agent that can write or publish.
@@ -69,8 +70,8 @@ Floor supervisors resolve issues during live production: jams, alarms, out-of-sp
 | Safety procedure included for hazards | 100% | 100% (5/5) | **100%** (all 3 hazard-type cases pass) |
 | Draft-document leaks | 0 | 0 | **0** |
 | Paraphrased questions routed correctly | ≥ 80% | n/a (rules can't) | **90%** (9 of 10) |
-| p95 latency | < 8 s agent mode | ~1 ms (mock pipeline) | **8.7 s (not met)**; p50 5.8 s |
-| Automated tests | all pass | 54/54 | 54/54 |
+| p95 latency | < 8 s agent mode | ~1 ms (mock pipeline) | **10.9 s (not met)**; 8.7 s in the previous run; p50 5.8 s |
+| Automated tests | all pass | 107/107 | 107/107 |
 
 > The v1 pass rate (32/32) checks **pipeline wiring**, not AI quality; the mock is extractive and was written alongside the golden set. The v2 column is the real live model on synthetic data. Failure: A10 ("how fast am I allowed to drive the lift truck indoors"): the router asked a clarifying question instead of answering. P11 was a test-string mismatch (answer said "60 and 80 microns"), fixed in the test. 2 answers mention lockout without citing the lockout procedure; 1 irrelevant safety note.
 

@@ -69,7 +69,9 @@ recent_logs(n=100) -> list[dict]        # JSON log events: ts, event, request_id
 
 ## Pages
 
-Sidebar: MIKRA logo/title, **role selector** (Floor Supervisor / Plant Manager) and user name in `st.session_state`. Manager-only pages are hidden or disabled for supervisors. Show a persistent **"SYNTHETIC DATA - demo only"** badge and `model_label()` (it says `mock-extractive-v1` for now).
+> **Update:** sign-in replaced the role selector. The role comes from the signed-in account (`common.role()`); the selector only appears when `auth.enabled: false`. Added pages: *Traces & logs* and *Users & access* (administrators), and *Advise changes* on Documents.
+
+Sidebar: MIKRA logo/title, signed-in name and role with a Sign out button (the old **role selector** and user name only in development mode). Manager-only pages are hidden or disabled for supervisors. Show a persistent **"SYNTHETIC DATA - demo only"** badge and `model_label()` (it says `mock-extractive-v1` for now).
 
 1. **Ask (home, supervisor main screen).** Big question box plus 6 one-click demo questions:
    - "How do I clear a jam on Conveyor C3?"

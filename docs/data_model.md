@@ -2,7 +2,7 @@
 
 SQLite with `PRAGMA foreign_keys=ON` on every connection. CHECK constraints enforce allowed values. Every seeded row has `is_synthetic=1`.
 
-> **Status:** the tables below are implemented except `AGENT_STEPS`, which is **planned for v2**. Until it lands, the agent trace is returned in `AskResponse.agent_trace` and written to the JSON logs.
+> **Status:** all tables below are implemented. `AGENT_STEPS` stores every agent step (LLM call, tool call, guard) with its input and output, so any question can be replayed in the Traces page. `USERS` and `DOCUMENT_REVIEWS` back the administrator features. Older databases are upgraded in place on start (`db.MIGRATIONS`).
 
 ```mermaid
 %% name: data_model
@@ -12,6 +12,7 @@ erDiagram
   CHUNKS ||--o{ CITATIONS : "cited by"
   QUERIES ||--o{ FEEDBACK : "rated by"
   QUERIES ||--o{ AGENT_STEPS : "traced by"
+  DOCUMENTS ||--o{ DOCUMENT_REVIEWS : "reviewed in"
   DOCUMENTS {
     text doc_id PK
     text doc_key
@@ -41,6 +42,9 @@ erDiagram
     text equipment_tag
     real latency_ms
     text model
+    text mode
+    int used_fallback
+    real cost_usd
     int is_synthetic
   }
   CITATIONS {
@@ -67,6 +71,25 @@ erDiagram
     int tokens_out
     real latency_ms
     text status
+    text input_text
+    text output_text
+    real cost_usd
+  }
+  DOCUMENT_REVIEWS {
+    int review_id PK
+    text doc_id FK
+    text actor
+    text action
+    text comment
+  }
+  USERS {
+    text username PK
+    text role
+    text requested_role
+    text status
+    text pw_hash
+    text decided_by
+    int failed_attempts
   }
   AUDIT_LOG {
     int audit_id PK
@@ -87,5 +110,7 @@ erDiagram
 | queries | Every question asked, including blocked and abstained ones | PII masked before storage; status ∈ ok/abstained/blocked/error |
 | citations | Which sections supported each answer | Composite PK; FKs to queries and chunks |
 | feedback | Thumbs up/down; thumbs-down goes to the manager review queue | review_status ∈ n/a/pending/approved/rejected; can't be resolved twice |
-| agent_steps *(planned)* | One row per agent step: LLM call, tool call or guard | FK → queries; tokens, latency and status per step, so cost and slow agents are visible |
+| agent_steps | One row per agent step: LLM call, tool call (including the pre-fetched first search) or guard | FK → queries (cascade); tokens, latency, status, cost, and the PII-masked input and output (clipped to 4,000 characters). Failed runs keep their partial steps and end with a `fallback_to_pipeline` guard |
+| document_reviews | The review conversation on a draft: submit, advise, resubmit, comment, approve, reject | FK → documents; a draft whose last action is `advise` is shown as *Changes requested* |
+| users | Accounts: role, approval status, salted password hash, lockout counters | role ∈ supervisor/manager/admin; status ∈ pending/approved/denied/disabled; passwords are PBKDF2-SHA256 hashes, never stored in clear |
 | audit_log | Who did what, when, with which model and request_id | Written in the same transaction as the action. v2 adds the prompt version and `agents.mode` in `details` |

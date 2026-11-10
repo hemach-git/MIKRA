@@ -56,7 +56,10 @@ CREATE TABLE IF NOT EXISTS queries (
     model             TEXT NOT NULL,
     guardrail_flags   TEXT NOT NULL DEFAULT '[]',
     error             TEXT,
-    is_synthetic      INTEGER NOT NULL DEFAULT 0
+    is_synthetic      INTEGER NOT NULL DEFAULT 0,
+    mode              TEXT NOT NULL DEFAULT 'pipeline',
+    used_fallback     INTEGER NOT NULL DEFAULT 0,
+    cost_usd          REAL NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS citations (
     query_id TEXT NOT NULL REFERENCES queries(query_id) ON DELETE CASCADE,
@@ -90,6 +93,52 @@ CREATE TABLE IF NOT EXISTS audit_log (
     request_id TEXT,
     details    TEXT NOT NULL DEFAULT '{}'
 );
+CREATE TABLE IF NOT EXISTS agent_steps (
+    step_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    query_id    TEXT NOT NULL REFERENCES queries(query_id) ON DELETE CASCADE,
+    seq         INTEGER NOT NULL,
+    agent       TEXT NOT NULL,
+    kind        TEXT NOT NULL CHECK (kind IN ('llm','tool','guard')),
+    name        TEXT NOT NULL DEFAULT '',
+    model       TEXT,
+    tokens_in   INTEGER NOT NULL DEFAULT 0,
+    tokens_out  INTEGER NOT NULL DEFAULT 0,
+    latency_ms  REAL NOT NULL DEFAULT 0,
+    status      TEXT NOT NULL CHECK (status IN ('ok','error','timeout','skipped')),
+    summary     TEXT NOT NULL DEFAULT '',
+    input_text  TEXT NOT NULL DEFAULT '',
+    output_text TEXT NOT NULL DEFAULT '',
+    cost_usd    REAL NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS ix_steps_query ON agent_steps(query_id, seq);
+CREATE TABLE IF NOT EXISTS document_reviews (
+    review_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+    doc_id     TEXT NOT NULL REFERENCES documents(doc_id) ON DELETE CASCADE,
+    ts         TEXT NOT NULL,
+    actor      TEXT NOT NULL,
+    action     TEXT NOT NULL CHECK (action IN ('submit','advise','resubmit','approve','reject','comment')),
+    comment    TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS ix_reviews_doc ON document_reviews(doc_id, review_id);
+CREATE TABLE IF NOT EXISTS users (
+    username        TEXT PRIMARY KEY,
+    display_name    TEXT NOT NULL,
+    email           TEXT NOT NULL DEFAULT '',
+    role            TEXT NOT NULL DEFAULT 'supervisor' CHECK (role IN ('supervisor','manager','admin')),
+    requested_role  TEXT NOT NULL DEFAULT 'supervisor' CHECK (requested_role IN ('supervisor','manager','admin')),
+    status          TEXT NOT NULL CHECK (status IN ('pending','approved','denied','disabled')),
+    pw_salt         TEXT NOT NULL,
+    pw_hash         TEXT NOT NULL,
+    created_at      TEXT NOT NULL,
+    decided_by      TEXT,
+    decided_at      TEXT,
+    decision_note   TEXT,
+    last_login      TEXT,
+    failed_attempts INTEGER NOT NULL DEFAULT 0,
+    locked_until    TEXT,
+    is_synthetic    INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS ix_users_status ON users(status);
 CREATE INDEX IF NOT EXISTS ix_queries_created ON queries(created_at);
 CREATE INDEX IF NOT EXISTS ix_docs_status ON documents(status, category);
 """
@@ -121,9 +170,19 @@ def tx():
         conn.close()
 
 
+MIGRATIONS = {   # columns added after the first release: (table, column) -> DDL
+    ("queries", "mode"): "ALTER TABLE queries ADD COLUMN mode TEXT NOT NULL DEFAULT 'pipeline'",
+    ("queries", "used_fallback"): "ALTER TABLE queries ADD COLUMN used_fallback INTEGER NOT NULL DEFAULT 0",
+    ("queries", "cost_usd"): "ALTER TABLE queries ADD COLUMN cost_usd REAL NOT NULL DEFAULT 0",
+}
+
+
 def init_db() -> None:
     with tx() as c:
         c.executescript(SCHEMA)
+        for (table, col), ddl in MIGRATIONS.items():     # upgrade databases created by an earlier version
+            if col not in {r["name"] for r in c.execute(f"PRAGMA table_info({table})")}:
+                c.execute(ddl)
 
 
 def rows(sql: str, params: tuple = ()) -> list[dict]:

@@ -1,13 +1,16 @@
 """Specialist agents (safety / maintenance / quality): each can only search its own published manuals."""
 from __future__ import annotations
 
+import time
+
 from pydantic import BaseModel, Field
 
 from app.agents import prompts
-from app.agents.base import Tool, clean_id, run_agent
+from app.agents.base import AgentError, Tool, clean_id, run_agent
 from app.config import get_config
 from app.models.schemas import AgentStep
 from app.services import retriever
+from app.services.guardrails import mask_pii
 
 
 class Finding(BaseModel):
@@ -52,13 +55,22 @@ def research(category: str, question: str, search_query: str) -> tuple[Findings,
              read_section),
     ]
     # First search runs in code (deterministic) and is handed to the agent: most specialists then need ONE LLM call.
-    search_docs(search_query, 3)            # fills `retrieved`
+    t0 = time.perf_counter()
+    pre_out = search_docs(search_query, 3)  # fills `retrieved`
+    pre = AgentStep(agent=category, kind="tool", name="search_docs", latency_ms=round((time.perf_counter() - t0) * 1000, 2),
+                    summary=f"pre-fetched search: {len(retrieved)} sections", input=mask_pii(search_query)[:300],
+                    output=", ".join(retrieved) or "no matches")
     full = "\n".join(_doc_tag(h, max_chars) for h in retrieved.values()) or "No matching sections found."
     user = (f"<question>\n{question}\n</question>\nSuggested search query: {search_query}\n\n"
             f"First search results:\n{full}")
-    out, steps = run_agent(category, prompts.SPECIALIST_SYSTEM.format(category=category.capitalize()), user,
-                           model=a["model"], max_tokens=a["max_tokens"], max_steps=a["max_steps"],
-                           schema=Findings, tools=tools, )
+    try:
+        out, steps = run_agent(category, prompts.SPECIALIST_SYSTEM.format(category=category.capitalize()), user,
+                               model=a["model"], max_tokens=a["max_tokens"], max_steps=a["max_steps"],
+                               schema=Findings, tools=tools, )
+    except AgentError as e:
+        e.steps = [pre] + e.steps
+        raise
+    steps.insert(0, pre)
     # Grounding at the source: keep only findings whose citations were actually retrieved by THIS agent.
     kept = []
     for f in out.findings:

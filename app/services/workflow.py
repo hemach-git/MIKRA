@@ -13,9 +13,9 @@ from pydantic import ValidationError
 
 from app.config import config_hash, get_config, model_label
 from app.data import db
-from app.models.schemas import AskRequest, AskResponse, Citation, LLMAnswer
+from app.models.schemas import AgentStep, AskRequest, AskResponse, Citation, LLMAnswer
 from app.observability.logging import log_event, new_request_id
-from app.services import audit, guardrails, llm, retriever, router
+from app.services import audit, guardrails, llm, pricing, retriever, router
 from app.agents import enabled as agents_enabled
 from app.agents import orchestrator
 from app.agents.prompts import PROMPT_VERSION
@@ -32,6 +32,11 @@ def ensure_ready() -> None:
     if not db.rows("SELECT 1 FROM documents LIMIT 1"):
         from app.data.seed_synthetic import seed
         seed()
+    from app.services import users
+    creds = users.ensure_seed_users()
+    if creds:
+        from app.config import db_path
+        print(f"[MIKRA] Demo accounts created. Passwords are in {db_path().parent / 'initial_credentials.txt'}")
     _ready = True
 
 
@@ -112,6 +117,9 @@ def ask(question: str, role: str = "supervisor", user: str = "demo.supervisor",
             except Exception as e:  # AgentError, timeout, budget, provider error -> rule-based pipeline
                 resp.used_fallback = True
                 resp.guardrail_flags.append("agent_fallback")
+                resp.agent_trace = list(getattr(e, "trace", []))     # keep the partial trace of the failed run
+                resp.agent_trace.append(AgentStep(agent="orchestrator", kind="guard", name="fallback_to_pipeline",
+                                                  status="error", summary=f"{type(e).__name__}: {str(e)[:120]}"))
                 log_event("agent_fallback", rid, error=type(e).__name__, detail=str(e)[:200])
             stage["agents"] = _ms(t)
         if agent_res is not None:
@@ -224,17 +232,28 @@ def _finish(resp: AskResponse, req: AskRequest, t0: float, stage: dict, is_synth
     resp.tokens_in, resp.tokens_out = tin, tout
     qid = "q-" + uuid.uuid4().hex[:12]
     r = resp.route
+    total_cost = round(sum(pricing.cost(s.model, s.tokens_in, s.tokens_out) for s in resp.agent_trace), 6)
     try:
         with db.tx() as c:
             c.execute("""INSERT INTO queries (query_id, request_id, created_at, user_name, role, question_masked,
                          routed_categories, primary_category, route_confidence, safety_flag, broad_search, emergency,
                          status, answer_confidence, equipment_tag, latency_ms, tokens_in, tokens_out, model,
-                         guardrail_flags, error, is_synthetic) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                         guardrail_flags, error, is_synthetic, mode, used_fallback, cost_usd)
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                       (qid, resp.request_id, created_at or db.now_iso(), req.user, req.role, resp.question,
                        json.dumps(r.categories if r else []), r.primary if r else None, r.confidence if r else None,
                        int(bool(r and r.safety_flag)), int(bool(r and r.broad_search)), int(resp.emergency),
                        resp.status, resp.confidence if resp.status == "ok" else None, resp.equipment_tag,
-                       resp.latency_ms, tin, tout, resp.model, json.dumps(resp.guardrail_flags), error, is_synthetic))
+                       resp.latency_ms, tin, tout, resp.model, json.dumps(resp.guardrail_flags), error, is_synthetic,
+                       resp.mode, int(resp.used_fallback), total_cost))
+            for i, st in enumerate(resp.agent_trace, 1):
+                st.seq = i
+                c.execute("""INSERT INTO agent_steps (query_id, seq, agent, kind, name, model, tokens_in, tokens_out,
+                             latency_ms, status, summary, input_text, output_text, cost_usd)
+                             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                          (qid, i, st.agent, st.kind, st.name, st.model, st.tokens_in, st.tokens_out, st.latency_ms,
+                           st.status, st.summary, st.input, st.output,
+                           pricing.cost(st.model, st.tokens_in, st.tokens_out)))
             for i, cit in enumerate(citations, 1):
                 c.execute("INSERT INTO citations (query_id, chunk_id, rank, score) VALUES (?,?,?,?)",
                           (qid, cit.chunk_id, i, cit.score))
@@ -250,7 +269,7 @@ def _finish(resp: AskResponse, req: AskRequest, t0: float, stage: dict, is_synth
                   categories=r.categories if r else [], route_confidence=r.confidence if r else None,
                   latency_ms=resp.latency_ms, stage_ms=stage, tokens_in=tin, tokens_out=tout, model=resp.model,
                   flags=resp.guardrail_flags, question=resp.question[:120], error=error, mode=resp.mode,
-                  agent_steps=[x.model_dump() for x in resp.agent_trace])
+                  agent_steps=[x.model_dump(exclude={"input", "output"}) for x in resp.agent_trace])
     return resp
 
 

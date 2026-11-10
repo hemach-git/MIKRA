@@ -42,11 +42,14 @@
 | R13 | PII in questions | Med | Med | Masked before storage and logging | Eng |
 | R14 | Low adoption on the floor | Med | High | Answers within seconds, plain English, tablet UI; track usage and helpful % | Plant Mgr |
 | R15 | Synthetic data differs from real binders | Certain | Med | Pilot with 2–3 real documents per category; re-run the golden set | Eng + SMEs |
+| R16 | **Stored traces hold what supervisors typed and what the model saw** (masked and clipped, but still sensitive) | Certain | Med | PII masking before storage; admin-only access; set a retention period and a deletion job before a pilot; no raw traces in git | Security |
+| R17 | **Local sign-in is weaker than company SSO** (no MFA, no email reset, demo passwords on disk) | Certain | Med | Passwords hashed and salted; lockout; random first-run passwords in a git-ignored file; replace with the company identity provider for a pilot | Security + IT |
+| R18 | **One administrator is a single point of failure** | Med | Med | The last administrator cannot be disabled or demoted; a second administrator should be approved before a pilot | Plant Mgr |
 
 ## 4. Assumptions and limitations
 
 - All documents, queries and feedback are **synthetic** (`is_synthetic=1`).
-- The role selector is not authentication.
+- Sign-in is a local prototype (salted hashes, lockout, administrator approval). It is not SSO; there is no email password reset and no multi-factor step.
 - **Live-LLM quality was measured on 45 synthetic cases (44/45).** It is not a guarantee for real documents; the checks are citation and keyword based, not an AI judge. The 32/32 rule-based result checks wiring only.
 - Small-model answers can vary run to run, and their safety content must be checked.
 - BM25 plus query rewriting suits ~100 sections; larger corpora need hybrid search.

@@ -5,6 +5,7 @@ to the rule-based pipeline.
 """
 from __future__ import annotations
 
+import re
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 
@@ -16,6 +17,10 @@ from app.config import get_config
 from app.models.schemas import CATEGORIES, AgentStep, LLMAnswer, RouteDecision
 from app.services import retriever
 from app.services import router as rules_router
+
+
+PHYSICAL = re.compile(r"\b(stuck|jam\w*|swap|seiz\w*|replac\w*|repair\w*|fix\w*|clear\w*|remov\w*|unclog\w*|adjust\w*|"
+                      r"clean\w*|enter\w*|reach\w*|restart\w*|reset|die change|roller|belt)\b", re.I)
 
 
 class OrchestratorResult(BaseModel):
@@ -119,6 +124,40 @@ def answer(question: str, emergency: bool = False) -> OrchestratorResult:
                 found = [f for f in found if f.category != "safety"] + [added]
                 trace.append(AgentStep(agent="orchestrator", kind="guard", name="safety_evidence_added",
                                        summary=f"Added {h['doc_key']} - {h['section']} (safety specialist found nothing)"))
+
+    # 3c. LOTO guarantee (CODE): physical work on machinery must carry the lockout/tagout procedure.
+    if hazard and not emergency and PHYSICAL.search(question):
+        sf = next((f for f in found if f.category == "safety"), None)
+        cited = {c for f in (sf.findings if sf else []) for c in f.citation_ids}
+        if not any(c.startswith("SOP-LOTO") for c in cited):
+            hits = [h for h in retriever.search("lockout tagout isolate energy " + question, ["safety"], top_k=8)
+                    if h["doc_key"].startswith("SOP-LOTO")]
+            if hits:
+                h = hits[0]
+                claim = h["text"].splitlines()[0][:300]
+                fnd = specialists.Finding(claim=claim, citation_ids=[h["chunk_id"]])
+                if sf is None:
+                    sf = specialists.Findings(category="safety", chunks=[h], findings=[fnd])
+                    found.append(sf)
+                else:
+                    sf.abstain = False
+                    sf.chunks.append(h)
+                    sf.findings.append(fnd)
+                trace.append(AgentStep(agent="orchestrator", kind="guard", name="loto_added",
+                                       summary=f"Added {h['doc_key']} - {h['section']} (physical work on machinery)"))
+
+    # 3d. Maintenance evidence guarantee (CODE): a hazard task routed to maintenance must not lose its repair steps.
+    if hazard and "maintenance" in cats:
+        mf = next((f for f in found if f.category == "maintenance"), None)
+        if mf is None or not mf.findings:
+            top = retriever.search((plan.queries.get("maintenance") or "") + " " + question, ["maintenance"], top_k=1)
+            if top and top[0]["coverage"] >= 0.3:
+                h = top[0]
+                added = specialists.Findings(category="maintenance", chunks=[h], findings=[
+                    specialists.Finding(claim=h["text"].splitlines()[0][:300], citation_ids=[h["chunk_id"]])])
+                found = [f for f in found if f.category != "maintenance"] + [added]
+                trace.append(AgentStep(agent="orchestrator", kind="guard", name="maintenance_evidence_added",
+                                       summary=f"Added {h['doc_key']} - {h['section']} (specialist found nothing)"))
 
     # 4. Synthesizer (skipped when no specialist found anything: abstain)
     useful = [f for f in found if f.findings]

@@ -4,7 +4,7 @@
 **Client problem:** A plant operator wants floor supervisors to get answers from the right documentation (safety procedures, maintenance manuals or quality control standards), routed automatically and answered accurately.
 **Engagement:** 2.5-hour prototype, local deployment only, **synthetic data**.
 
-> **Status (2026-11-09).** The rule-based version (v1) and the Streamlit UI are built; v1 is tested (54 automated tests; 32/32 rule-based evals on a mock model, which checks wiring only). The AI agent layer (v2) is built and **formally evaluated live: 43/45 on the 45-case golden set** (synthetic data).
+> **Status (2026-11-09).** The rule-based version (v1) and the Streamlit UI are built; v1 is tested (54 automated tests; 32/32 rule-based evals on a mock model, which checks wiring only). The AI agent layer (v2) is built and **formally evaluated live: 44/45 on the 45-case golden set** (synthetic data).
 
 ## 1. Business problem
 
@@ -25,9 +25,9 @@ Floor supervisors resolve issues during live production: jams, alarms, out-of-sp
 
 | Capability | AI or code | Status |
 |---|---|---|
-| Understand intent, pick sources, extract equipment, rewrite search queries | **Router agent (LLM)** | Built; live eval 43/45 overall |
-| Research each source with search tools, return cited findings | **Safety / Maintenance / Quality agents (LLM + tools)** | Built; live eval 43/45 overall |
-| Merge findings into one structured, cited answer | **Synthesizer agent (LLM)** | Built; live eval 43/45 overall |
+| Understand intent, pick sources, extract equipment, rewrite search queries | **Router agent (LLM)** | Built; live eval 44/45 overall |
+| Research each source with search tools, return cited findings | **Safety / Maintenance / Quality agents (LLM + tools)** | Built; live eval 44/45 overall |
+| Merge findings into one structured, cited answer | **Synthesizer agent (LLM)** | Built; live eval 44/45 overall |
 | Safety override, published-only filter, grounding check, step and token caps, approvals, audit | **Code (deliberately not AI)** | Built |
 | Rule-based router and extractive answer (fallback) | Code | Built, tested |
 | Critic agent, insights agent, semantic search, LLM judge | LLM | Not built (a second AI check on answers is next) |
@@ -63,20 +63,20 @@ Floor supervisors resolve issues during live production: jams, alarms, out-of-sp
 
 | Criterion | Target | v1 result (measured, mock LLM) | v2 result (live `gpt-4o-mini`, 45 cases) |
 |---|---|---|---|
-| Routing accuracy | ≥ 90% | 100% (20/20) | **100%** |
+| Routing accuracy | ≥ 90% | 100% (20/20) | **96.3%** |
 | Correct document cited | ≥ 85% | 100% | **97.1%** |
 | Abstains when not in docs | 100% | 100% (5/5) | **100%** |
-| Safety procedure included for hazards | 100% | 100% (5/5) | **100%** (hazard-type cases 2 of 3: one missed the maintenance citation) |
+| Safety procedure included for hazards | 100% | 100% (5/5) | **100%** (all 3 hazard-type cases pass) |
 | Draft-document leaks | 0 | 0 | **0** |
-| Paraphrased questions routed correctly | ≥ 80% | n/a (rules can't) | **100%** |
-| p95 latency | < 8 s agent mode | ~1 ms (mock pipeline) | **9.8 s (not met)**; p50 5.8 s |
+| Paraphrased questions routed correctly | ≥ 80% | n/a (rules can't) | **90%** (9 of 10) |
+| p95 latency | < 8 s agent mode | ~1 ms (mock pipeline) | **8.7 s (not met)**; p50 5.8 s |
 | Automated tests | all pass | 54/54 | 54/54 |
 
-> The v1 pass rate (32/32) checks **pipeline wiring**, not AI quality; the mock is extractive and was written alongside the golden set. The v2 column is the real live model on synthetic data. Failures: P11 (paint thickness value missing) and H02 (maintenance manual not cited); 1 irrelevant safety note.
+> The v1 pass rate (32/32) checks **pipeline wiring**, not AI quality; the mock is extractive and was written alongside the golden set. The v2 column is the real live model on synthetic data. Failure: A10 ("how fast am I allowed to drive the lift truck indoors"): the router asked a clarifying question instead of answering. P11 was a test-string mismatch (answer said "60 and 80 microns"), fixed in the test. 2 answers mention lockout without citing the lockout procedure; 1 irrelevant safety note.
 
 ## 7. Roadmap
 
 - **v1 (built):** local, single plant, rule-based pipeline, mock LLM, citations and approvals from day one.
-- **v2 (built):** LLM agents for routing, research and answers; agent trace; fallback to v1; Streamlit UI. Live eval 43/45; latency above goal.
+- **v2 (built):** LLM agents for routing, research and answers; agent trace; fallback to v1; Streamlit UI. Live eval 44/45; latency above goal.
 - **Next:** real documents from one plant line, sign-in, faster answers, a second AI check on answers.
 - **Later:** PDF ingestion, hybrid search, manager insights agent, CMMS integration, multi-plant rollout, online evaluation from feedback.

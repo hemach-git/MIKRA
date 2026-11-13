@@ -1,6 +1,6 @@
 # Tests + evals session brief: MIKRA v2 agents
 
-You are the **Tests + evals** session for MIKRA in `C:\Users\Chepuri\mfg-doc-router`. Do **not commit**; the main session commits.
+You are the **Tests + evals** session for MIKRA in `C:\Users\Chepuri\AI-Products\Prototypes\MIKRA`. Do **not commit**; the main session commits.
 
 **You own:** `tests/*`, `evals/*`. **Do not edit** `app/*`, `config.yaml`, `docs/*`.
 
